@@ -1,0 +1,620 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const router = express.Router();
+const { validateModule, sanitizeData } = require('../utils/validation');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/customers/');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}-${file.originalname}`;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit (increased for documents)
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain', 'text/csv'
+    ];
+
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not supported. Allowed: Images, PDF, DOC, DOCX, XLS, XLSX, TXT, CSV'));
+    }
+  }
+});
+
+const validateDateSequence = (customerData) => {
+  const errors = [];
+
+  const checkDates = (startDateField, expiryDateField, errorMsg) => {
+    const startDate = customerData[startDateField];
+    const expiryDate = customerData[expiryDateField];
+
+    if (startDate && expiryDate && new Date(expiryDate) < new Date(startDate)) {
+      errors.push(errorMsg);
+    }
+  };
+
+  checkDates('AgreementDate', 'AgreementExpiryDate', 'Agreement Expiry Date cannot be before Agreement Date');
+  checkDates('BGDate', 'BGExpiryDate', 'BG Expiry Date cannot be before BG Date');
+  checkDates('PODate', 'POExpiryDate', 'PO Expiry Date cannot be before PO Date');
+
+  return errors;
+};
+
+// This file defines API routes for managing customer data in the Transport Management System.
+// It uses Express.js to create route handlers for CRUD operations (Create, Read, Update, Delete)
+// related to customers. The routes interact with a MySQL database through a connection pool.
+
+module.exports = (pool) => {
+  // Get customers for dropdown (simplified data)
+  router.get('/dropdown', async (req, res) => {
+    try {
+      const [rows] = await pool.query(`
+        SELECT 
+          CustomerID as customer_id,
+          COALESCE(Name, 'Unknown') as company_name,
+          COALESCE(CustomerCode, '') as customer_code
+        FROM Customer 
+        ORDER BY Name ASC
+      `);
+      res.json({ success: true, data: rows });
+    } catch (error) {
+      console.error('Error fetching customers for dropdown:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Helper function to add file URLs to customer data
+  const addFileUrls = (customer) => {
+    const baseUrl = 'http://localhost:3003/api/customers/files/';
+
+    if (customer.AgreementFile) {
+      // Extract just the filename from the stored path
+      const filename = customer.AgreementFile.includes('/') || customer.AgreementFile.includes('\\')
+        ? customer.AgreementFile.split(/[\\/]/).pop()
+        : customer.AgreementFile;
+      customer.AgreementFileUrl = baseUrl + filename;
+    }
+    if (customer.BGFile) {
+      const filename = customer.BGFile.includes('/') || customer.BGFile.includes('\\')
+        ? customer.BGFile.split(/[\\/]/).pop()
+        : customer.BGFile;
+      customer.BGFileUrl = baseUrl + filename;
+    }
+    if (customer.BGReceivingFile) {
+      const filename = customer.BGReceivingFile.includes('/') || customer.BGReceivingFile.includes('\\')
+        ? customer.BGReceivingFile.split(/[\\/]/).pop()
+        : customer.BGReceivingFile;
+      customer.BGReceivingFileUrl = baseUrl + filename;
+    }
+    if (customer.POFile) {
+      const filename = customer.POFile.includes('/') || customer.POFile.includes('\\')
+        ? customer.POFile.split(/[\\/]/).pop()
+        : customer.POFile;
+      customer.POFileUrl = baseUrl + filename;
+    }
+
+    return customer;
+  };
+
+  // Get all customers
+  // This route retrieves all customer records from the database.
+  // It responds with a JSON array of customer objects ordered by latest first.
+  router.get('/', async (req, res) => {
+    try {
+      const [rows] = await pool.query('SELECT * FROM Customer ORDER BY CreatedAt DESC, CustomerID DESC');
+
+      // Add file URLs to each customer
+      const customersWithFileUrls = rows.map(customer => addFileUrls(customer));
+
+      res.json(customersWithFileUrls);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Get a single customer by ID
+  // This route retrieves a specific customer record based on the provided ID.
+  // It responds with a JSON object of the customer if found, or a 404 error if not found.
+  router.get('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [rows] = await pool.query('SELECT * FROM Customer WHERE CustomerID = ?', [id]);
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      // Add file URLs to the customer data
+      const customerWithFileUrls = addFileUrls(rows[0]);
+
+      res.json(customerWithFileUrls);
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Create a new customer
+  // This route creates a new customer record in the database using the data provided in the request body.
+  // It responds with a 201 status code and the newly created customer's data, including the generated ID.
+  router.post('/', upload.fields([
+    { name: 'AgreementFile', maxCount: 1 },
+    { name: 'BGFile', maxCount: 1 },
+    { name: 'BGReceivingFile', maxCount: 1 },
+    { name: 'POFile', maxCount: 1 },
+    { name: 'RatesAnnexureFile', maxCount: 1 },
+    { name: 'MISFormatFile', maxCount: 1 },
+    { name: 'KPISLAFile', maxCount: 1 },
+    { name: 'PerformanceReportFile', maxCount: 1 }
+  ]), async (req, res) => {
+    const customer = req.body;
+    const files = req.files;
+
+    const dateErrors = validateDateSequence(customer);
+    if (dateErrors.length > 0) {
+      return res.status(400).json({ errors: dateErrors });
+    }
+    
+    try {
+      // Generate CustomerCode automatically if not provided
+      let customerCode = customer.CustomerCode;
+      if (!customerCode || customerCode.trim() === '') {
+        const customerName = customer.Name || '';
+        const namePrefix = customerName.substring(0, 3).toUpperCase();
+        let nextNumber = 1;
+
+        // Find the highest existing customer code number with the same prefix
+        const [maxCodeResult] = await pool.query(`
+          SELECT CustomerCode FROM Customer
+          WHERE CustomerCode REGEXP '^${namePrefix}[0-9]+$' 
+          ORDER BY CAST(SUBSTRING(CustomerCode, 4) AS UNSIGNED) DESC
+          LIMIT 1
+        `);
+
+        if (maxCodeResult.length > 0) {
+          const maxCode = maxCodeResult[0].CustomerCode;
+          const currentNumber = parseInt(maxCode.substring(3));
+          nextNumber = currentNumber + 1;
+        }
+
+        customerCode = `${namePrefix}${String(nextNumber).padStart(3, '0')}`;
+
+        // Double-check that this code doesn't exist (safety check)
+        let [existingCheck] = await pool.query(
+          'SELECT CustomerID FROM Customer WHERE CustomerCode = ?',
+          [customerCode]
+        );
+
+        // If somehow it still exists, keep incrementing until we find a free one
+        while (existingCheck.length > 0) {
+          nextNumber++;
+          customerCode = `${namePrefix}${String(nextNumber).padStart(3, '0')}`;
+          [existingCheck] = await pool.query(
+            'SELECT CustomerID FROM Customer WHERE CustomerCode = ?',
+            [customerCode]
+          );
+        }
+      }
+
+      // Handle file paths
+      const filePaths = {};
+      if (files) {
+        if (files.AgreementFile) filePaths.AgreementFile = files.AgreementFile[0].filename;
+        if (files.BGFile) filePaths.BGFile = files.BGFile[0].filename;
+        if (files.BGReceivingFile) filePaths.BGReceivingFile = files.BGReceivingFile[0].filename;
+        if (files.POFile) filePaths.POFile = files.POFile[0].filename;
+        if (files.RatesAnnexureFile) filePaths.RatesAnnexureFile = files.RatesAnnexureFile[0].filename;
+        if (files.MISFormatFile) filePaths.MISFormatFile = files.MISFormatFile[0].filename;
+        if (files.KPISLAFile) filePaths.KPISLAFile = files.KPISLAFile[0].filename;
+        if (files.PerformanceReportFile) filePaths.PerformanceReportFile = files.PerformanceReportFile[0].filename;
+      }
+
+      const [result] = await pool.query(`
+        INSERT INTO Customer (
+          MasterCustomerName, Name, CustomerCode, ServiceCode, TypeOfServices, Locations, CustomerSite,
+          CustomerMobileNo, AlternateMobileNo, CustomerEmail, CustomerContactPerson, CustomerGroup, CityName,
+          HouseFlatNo, StreetLocality, CustomerCity, CustomerState, CustomerPinCode, CustomerCountry,
+          Agreement, AgreementFile, AgreementDate, AgreementTenure, AgreementExpiryDate,
+          CustomerNoticePeriod, CogentNoticePeriod, CreditPeriod, Insurance, MinimumInsuranceValue,
+          CogentDebitClause, CogentDebitLimit, BG, BGFile, BGAmount, BGDate, BGExpiryDate,
+          BGBank, BGReceivingByCustomer, BGReceivingFile, PO, POFile, PODate, POValue, POTenure,
+          POExpiryDate, Rates, RatesAnnexureFile, YearlyEscalationClause, GSTNo, GSTRate, TypeOfBilling, BillingTenure,
+          MISFormatFile, KPISLAFile, PerformanceReportFile,
+          CustomerRegisteredOfficeAddress,
+          CustomerCorporateOfficeAddress, CogentProjectHead, CogentProjectOpsManager,
+          CustomerImportantPersonAddress1, CustomerImportantPersonAddress2
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        customer.MasterCustomerName, customer.Name, customerCode, customer.ServiceCode, customer.TypeOfServices, customer.Locations, customer.CustomerSite,
+        customer.CustomerMobileNo, customer.AlternateMobileNo, customer.CustomerEmail, customer.CustomerContactPerson, customer.CustomerGroup, customer.CityName,
+        customer.house_flat_no || null, customer.street_locality || null, customer.city || null, customer.state || null, customer.pin_code || null, customer.country || 'India',
+        customer.Agreement, filePaths.AgreementFile || null, customer.AgreementDate || null,
+        customer.AgreementTenure, customer.AgreementExpiryDate || null, customer.CustomerNoticePeriod,
+        customer.CogentNoticePeriod, customer.CreditPeriod, customer.Insurance,
+        customer.MinimumInsuranceValue || null, customer.CogentDebitClause,
+        customer.CogentDebitLimit || null, customer.BG, filePaths.BGFile || null,
+        customer.BGAmount || null, customer.BGDate || null, customer.BGExpiryDate || null,
+        customer.BGBank, customer.BGReceivingByCustomer, filePaths.BGReceivingFile || null,
+        customer.PO, filePaths.POFile || null, customer.PODate || null, customer.POValue || null, customer.POTenure,
+        customer.POExpiryDate || null, customer.Rates, filePaths.RatesAnnexureFile || null, customer.YearlyEscalationClause,
+        customer.GSTNo, customer.GSTRate, customer.TypeOfBilling, customer.BillingTenure,
+        filePaths.MISFormatFile || null, filePaths.KPISLAFile || null, filePaths.PerformanceReportFile || null,
+        customer.CustomerRegisteredOfficeAddress, customer.CustomerCorporateOfficeAddress,
+        customer.CogentProjectHead, customer.CogentProjectOpsManager,
+        customer.CustomerImportantPersonAddress1, customer.CustomerImportantPersonAddress2
+      ]);
+      
+      const customerId = result.insertId;
+
+      // Insert customer office addresses
+      if (customer.CustomerOfficeAddress && Array.isArray(customer.CustomerOfficeAddress)) {
+        for (const address of customer.CustomerOfficeAddress) {
+          await pool.query('INSERT INTO customer_office_address (CustomerID, OfficeType, ContactPerson, Department, Designation, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            customerId, address.OfficeType, address.ContactPerson, address.Department, address.Designation, address.Mobile, address.Email, address.DOB, address.Address
+          ]);
+        }
+      }
+
+      // Insert key contacts
+      if (customer.CustomerKeyContact && Array.isArray(customer.CustomerKeyContact)) {
+        for (const contact of customer.CustomerKeyContact) {
+          await pool.query('INSERT INTO customer_key_contact (CustomerID, Name, Department, Designation, Location, OfficeType, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            customerId, contact.Name, contact.Department, contact.Designation, contact.Location, contact.OfficeType, contact.Mobile, contact.Email, contact.DOB, contact.Address
+          ]);
+        }
+      }
+
+      // Insert cogent contacts
+      if (customer.CustomerCogentContact) {
+        const cogent = customer.CustomerCogentContact;
+        await pool.query('INSERT INTO customer_cogent_contact (CustomerID, CustomerOwner, ProjectHead, OpsHead, OpsManager, Supervisor) VALUES (?, ?, ?, ?, ?, ?)', [
+          customerId, cogent.CustomerOwner, cogent.ProjectHead, cogent.OpsHead, cogent.OpsManager, cogent.Supervisor
+        ]);
+      }
+
+      res.status(201).json({ 
+        CustomerID: customerId, 
+        CustomerCode: customerCode, 
+        ...customer,
+        ...filePaths
+      });
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Update a customer
+  // This route updates an existing customer record identified by the provided ID with new data from the request body.
+  // It responds with the updated customer data if successful, or a 404 error if the customer is not found.
+  router.put('/:id', upload.fields([
+    { name: 'AgreementFile', maxCount: 1 },
+    { name: 'BGFile', maxCount: 1 },
+    { name: 'BGReceivingFile', maxCount: 1 },
+    { name: 'POFile', maxCount: 1 },
+    { name: 'RatesAnnexureFile', maxCount: 1 },
+    { name: 'MISFormatFile', maxCount: 1 },
+    { name: 'KPISLAFile', maxCount: 1 },
+    { name: 'PerformanceReportFile', maxCount: 1 }
+  ]), async (req, res) => {
+    const { id } = req.params;
+    const customer = req.body;
+    const files = req.files;
+
+    console.log('🔧 Customer UPDATE request for ID:', id);
+    console.log('📝 Customer data received:', customer);
+
+    const dateErrors = validateDateSequence(customer);
+    if (dateErrors.length > 0) {
+      return res.status(400).json({ errors: dateErrors });
+    }
+    
+    try {
+      // Check if customer exists
+      const [existingCustomer] = await pool.query(
+        'SELECT * FROM Customer WHERE CustomerID = ?',
+        [id]
+      );
+
+      if (existingCustomer.length === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      // Check if CustomerCode is being changed and if it conflicts with another customer
+      if (customer.CustomerCode !== existingCustomer[0].CustomerCode) {
+        const [codeCheck] = await pool.query(
+          'SELECT CustomerID FROM Customer WHERE CustomerCode = ? AND CustomerID != ?',
+          [customer.CustomerCode, id]
+        );
+
+        if (codeCheck.length > 0) {
+          return res.status(400).json({ error: 'Customer code already exists' });
+        }
+      }
+
+      // Handle file paths - keep existing files if no new files uploaded
+      const filePaths = {
+        AgreementFile: existingCustomer[0].AgreementFile,
+        BGFile: existingCustomer[0].BGFile,
+        BGReceivingFile: existingCustomer[0].BGReceivingFile,
+        POFile: existingCustomer[0].POFile,
+        RatesAnnexureFile: existingCustomer[0].RatesAnnexureFile,
+        MISFormatFile: existingCustomer[0].MISFormatFile,
+        KPISLAFile: existingCustomer[0].KPISLAFile,
+        PerformanceReportFile: existingCustomer[0].PerformanceReportFile
+      };
+      
+      if (files) {
+        if (files.AgreementFile) {
+          // Delete old file if exists
+          if (existingCustomer[0].AgreementFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].AgreementFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.AgreementFile = files.AgreementFile[0].filename;
+        }
+        if (files.BGFile) {
+          if (existingCustomer[0].BGFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].BGFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.BGFile = files.BGFile[0].filename;
+        }
+        if (files.BGReceivingFile) {
+          if (existingCustomer[0].BGReceivingFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].BGReceivingFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.BGReceivingFile = files.BGReceivingFile[0].filename;
+        }
+        if (files.POFile) {
+          if (existingCustomer[0].POFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].POFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.POFile = files.POFile[0].filename;
+        }
+        if (files.RatesAnnexureFile) {
+          if (existingCustomer[0].RatesAnnexureFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].RatesAnnexureFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.RatesAnnexureFile = files.RatesAnnexureFile[0].filename;
+        }
+        if (files.MISFormatFile) {
+          if (existingCustomer[0].MISFormatFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].MISFormatFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.MISFormatFile = files.MISFormatFile[0].filename;
+        }
+        if (files.KPISLAFile) {
+          if (existingCustomer[0].KPISLAFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].KPISLAFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.KPISLAFile = files.KPISLAFile[0].filename;
+        }
+        if (files.PerformanceReportFile) {
+          if (existingCustomer[0].PerformanceReportFile) {
+            const oldPath = path.join(__dirname, '../uploads/customers/', existingCustomer[0].PerformanceReportFile);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          filePaths.PerformanceReportFile = files.PerformanceReportFile[0].filename;
+        }
+      }
+
+      // Convert empty strings to null for date and numeric fields
+      // Also handle array values (when FormData has duplicate field names)
+      const processedCustomer = {};
+      Object.keys(customer).forEach(key => {
+        let value = customer[key];
+
+        // If value is an array, take the last value (most recent)
+        if (Array.isArray(value)) {
+          value = value[value.length - 1];
+        }
+
+        // Convert empty strings to null for specific fields
+        if (key.includes('Date')) {
+          // Convert datetime strings to date format for MySQL DATE columns
+          if (value && typeof value === 'string' && value.includes('T')) {
+            processedCustomer[key] = value.split('T')[0]; // Extract date part only
+          } else {
+            processedCustomer[key] = value || null;
+          }
+        } else if (key.includes('Value') || key.includes('Amount') || key.includes('Limit')) {
+          processedCustomer[key] = value || null;
+        } else {
+          processedCustomer[key] = value;
+        }
+      });
+
+      await pool.query(`
+        UPDATE Customer SET
+          MasterCustomerName = ?, Name = ?, CustomerCode = ?, ServiceCode = ?, TypeOfServices = ?, Locations = ?, CustomerSite = ?,
+          CustomerMobileNo = ?, AlternateMobileNo = ?, CustomerEmail = ?, CustomerContactPerson = ?, CustomerGroup = ?, CityName = ?,
+          HouseFlatNo = ?, StreetLocality = ?, CustomerCity = ?, CustomerState = ?, CustomerPinCode = ?, CustomerCountry = ?,
+          Agreement = ?, AgreementFile = ?, AgreementDate = ?, AgreementTenure = ?, AgreementExpiryDate = ?,
+          CustomerNoticePeriod = ?, CogentNoticePeriod = ?, CreditPeriod = ?, Insurance = ?, MinimumInsuranceValue = ?,
+          CogentDebitClause = ?, CogentDebitLimit = ?, BG = ?, BGFile = ?, BGAmount = ?, BGDate = ?, BGExpiryDate = ?,
+          BGBank = ?, BGReceivingByCustomer = ?, BGReceivingFile = ?, PO = ?, POFile = ?, PODate = ?, POValue = ?, POTenure = ?,
+          POExpiryDate = ?, Rates = ?, RatesAnnexureFile = ?, YearlyEscalationClause = ?, GSTNo = ?, GSTRate = ?, TypeOfBilling = ?, BillingTenure = ?,
+          MISFormatFile = ?, KPISLAFile = ?, PerformanceReportFile = ?,
+          CustomerRegisteredOfficeAddress = ?,
+          CustomerCorporateOfficeAddress = ?, CogentProjectHead = ?, CogentProjectOpsManager = ?,
+          CustomerImportantPersonAddress1 = ?, CustomerImportantPersonAddress2 = ?
+        WHERE CustomerID = ?
+      `, [
+        processedCustomer.MasterCustomerName, processedCustomer.Name, processedCustomer.CustomerCode, processedCustomer.ServiceCode,
+        processedCustomer.TypeOfServices, processedCustomer.Locations, processedCustomer.CustomerSite,
+        processedCustomer.CustomerMobileNo, processedCustomer.AlternateMobileNo, processedCustomer.CustomerEmail, processedCustomer.CustomerContactPerson, processedCustomer.CustomerGroup, processedCustomer.CityName,
+        processedCustomer.house_flat_no || null, processedCustomer.street_locality || null, processedCustomer.city || null, processedCustomer.state || null, processedCustomer.pin_code || null, processedCustomer.country || 'India',
+        processedCustomer.Agreement, filePaths.AgreementFile, processedCustomer.AgreementDate,
+        processedCustomer.AgreementTenure, processedCustomer.AgreementExpiryDate, processedCustomer.CustomerNoticePeriod,
+        processedCustomer.CogentNoticePeriod, processedCustomer.CreditPeriod, processedCustomer.Insurance,
+        processedCustomer.MinimumInsuranceValue, processedCustomer.CogentDebitClause,
+        processedCustomer.CogentDebitLimit, processedCustomer.BG, filePaths.BGFile,
+        processedCustomer.BGAmount, processedCustomer.BGDate, processedCustomer.BGExpiryDate,
+        processedCustomer.BGBank, processedCustomer.BGReceivingByCustomer, filePaths.BGReceivingFile,
+        processedCustomer.PO, filePaths.POFile, processedCustomer.PODate, processedCustomer.POValue, processedCustomer.POTenure,
+        processedCustomer.POExpiryDate, processedCustomer.Rates, filePaths.RatesAnnexureFile, processedCustomer.YearlyEscalationClause,
+        processedCustomer.GSTNo, processedCustomer.GSTRate, processedCustomer.TypeOfBilling, processedCustomer.BillingTenure,
+        filePaths.MISFormatFile, filePaths.KPISLAFile, filePaths.PerformanceReportFile,
+        processedCustomer.CustomerRegisteredOfficeAddress, processedCustomer.CustomerCorporateOfficeAddress,
+        processedCustomer.CogentProjectHead, processedCustomer.CogentProjectOpsManager,
+        processedCustomer.CustomerImportantPersonAddress1, processedCustomer.CustomerImportantPersonAddress2,
+        id
+      ]);
+
+      // Update customer office addresses
+      if (customer.CustomerOfficeAddress && Array.isArray(customer.CustomerOfficeAddress)) {
+        await pool.query('DELETE FROM customer_office_address WHERE CustomerID = ?', [id]);
+        for (const address of customer.CustomerOfficeAddress) {
+          await pool.query('INSERT INTO customer_office_address (CustomerID, OfficeType, ContactPerson, Department, Designation, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            id, address.OfficeType, address.ContactPerson, address.Department, address.Designation, address.Mobile, address.Email, address.DOB, address.Address
+          ]);
+        }
+      }
+
+      // Update key contacts
+      if (customer.CustomerKeyContact && Array.isArray(customer.CustomerKeyContact)) {
+        await pool.query('DELETE FROM customer_key_contact WHERE CustomerID = ?', [id]);
+        for (const contact of customer.CustomerKeyContact) {
+          await pool.query('INSERT INTO customer_key_contact (CustomerID, Name, Department, Designation, Location, OfficeType, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+            id, contact.Name, contact.Department, contact.Designation, contact.Location, contact.OfficeType, contact.Mobile, contact.Email, contact.DOB, contact.Address
+          ]);
+        }
+      }
+
+      // Update cogent contacts
+      if (customer.CustomerCogentContact) {
+        await pool.query('DELETE FROM customer_cogent_contact WHERE CustomerID = ?', [id]);
+        const cogent = customer.CustomerCogentContact;
+        await pool.query('INSERT INTO customer_cogent_contact (CustomerID, CustomerOwner, ProjectHead, OpsHead, OpsManager, Supervisor) VALUES (?, ?, ?, ?, ?, ?)', [
+          id, cogent.CustomerOwner, cogent.ProjectHead, cogent.OpsHead, cogent.OpsManager, cogent.Supervisor
+        ]);
+      }
+
+      res.json({ CustomerID: parseInt(id), ...customer, ...filePaths });
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      if (error.code === 'ER_DUP_ENTRY') {
+        res.status(400).json({ error: 'Customer code already exists' });
+      } else {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  });
+
+  // Delete a customer
+  // This route deletes a customer record from the database based on the provided ID.
+  // It responds with a success message if the deletion is successful, or a 404 error if the customer is not found.
+  router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [result] = await pool.query('DELETE FROM Customer WHERE CustomerID = ?', [id]);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      res.json({ message: 'Customer deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Serve customer files
+  router.get('/files/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '../uploads/customers/', filename);
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Disposition', 'inline');
+
+    // Send the file
+    res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('Error serving customer file:', err);
+        res.status(500).json({ error: 'Error serving file' });
+      }
+    });
+  });
+
+  // Delete specific file from customer
+  router.delete('/:id/files/:fieldName', async (req, res) => {
+    try {
+      const { id, fieldName } = req.params;
+
+      console.log(`🗑️ Deleting customer file - ID: ${id}, Field: ${fieldName}`);
+
+      // Get current customer data to find the file path
+      const [customers] = await pool.query('SELECT * FROM Customer WHERE CustomerID = ?', [id]);
+
+      if (customers.length === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      const customer = customers[0];
+      const fileName = customer[fieldName];
+
+      if (!fileName) {
+        return res.status(404).json({ error: 'File not found in database' });
+      }
+
+      // Delete file from filesystem
+      const filePath = path.join(__dirname, '../uploads/customers', fileName);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`✅ File deleted from filesystem: ${filePath}`);
+      }
+
+      // Update database to remove file reference
+      const updateQuery = `UPDATE Customer SET ${fieldName} = NULL WHERE CustomerID = ?`;
+      await pool.query(updateQuery, [id]);
+
+      console.log(`✅ Customer file deleted successfully - ID: ${id}, Field: ${fieldName}`);
+      res.json({
+        success: true,
+        message: 'File deleted successfully',
+        fieldName,
+        fileName
+      });
+
+    } catch (error) {
+      console.error('❌ Error deleting customer file:', error);
+      res.status(500).json({
+        error: 'Failed to delete file',
+        details: error.message
+      });
+    }
+  });
+
+  return router;
+};

@@ -1,0 +1,233 @@
+.document-upload {
+  margin-bottom: 1rem;
+}
+
+/* Compact variant for smaller spaces */
+.bank-cheque-wrapper .document-upload {
+  margin-bottom: 15px;
+}
+
+.bank-cheque-wrapper .upload-container {
+  padding: 15px;
+}
+
+.bank-cheque-wrapper .preview-image {
+  max-width: 150px !important;
+  max-height: 100px !important;
+}
+
+.document-upload label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.required {
+  color: #e74c3c;
+}
+
+.upload-container {
+  position: relative;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+.file-display-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 2px dashed #ff8c42;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 50px;
+}
+
+.choose-file-btn {
+  background: #ff8c42;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  transition: background-color 0.2s;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.choose-file-btn:hover {
+  background: #e67e22;
+}
+
+.file-name-display {
+  flex: 1;
+  color: #666;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+.remove-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  margin-left: auto;
+}
+
+.remove-btn:hover {
+  background: #c0392b;
+}
+
+.document-preview {
+  margin-top: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background: #f9f9f9;
+}
+
+.preview-image {
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.pdf-preview,
+.document-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pdf-icon,
+.doc-icon {
+  font-size: 1.5rem;
+}
+
+.view-link {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  margin-left: auto;
+}
+
+.view-link:hover {
+  text-decoration: underline;
+}
+
+.error-message {
+  display: block;
+  color: #e74c3c;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+/* Modal Styles for Image Preview */
+.image-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.image-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 95vw;
+  height: 90vh;
+  max-width: 1200px;
+  max-height: 800px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+}
+
+.image-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
+}
+
+.image-modal-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.modal-close-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.modal-close-btn:hover {
+  background: #c0392b;
+}
+
+.image-modal-body {
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  overflow: auto;
+  background: #f8f9fa;
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  background: white;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.clickable-preview {
+  transition: transform 0.2s ease;
+}
+
+.clickable-preview:hover {
+  transform: scale(1.05);
+}
