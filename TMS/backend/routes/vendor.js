@@ -49,7 +49,7 @@ const upload = multer({
 module.exports = (pool) => {
   // Helper function to add file URLs to vendor data
   const addFileUrls = (vendor) => {
-    const baseUrl = 'http://localhost:3003/api/vendors/files/';
+    const baseUrl = 'http://localhost:3004/api/vendors/files/';
 
     // Map database column names to URL field names
     if (vendor.VendorPhoto) {
@@ -206,7 +206,7 @@ module.exports = (pool) => {
 
         // Double-check that this code doesn't exist (safety check)
         const [existingCheck] = await pool.query(
-          'SELECT VendorID FROM vendor WHERE VendorCode = ?',
+          'SELECT VendorID FROM vendor_master WHERE VendorCode = ?',
           [vendorCode]
         );
 
@@ -215,7 +215,7 @@ module.exports = (pool) => {
           nextNumber++;
           vendorCode = `VEND${String(nextNumber).padStart(3, '0')}`;
           const [recheckResult] = await pool.query(
-            'SELECT VendorID FROM vendor WHERE VendorCode = ?',
+            'SELECT VendorID FROM vendor_master WHERE VendorCode = ?',
             [vendorCode]
           );
           if (recheckResult.length === 0) break;
@@ -242,7 +242,7 @@ module.exports = (pool) => {
 
       // Build comprehensive INSERT query for existing vendor table
       const insertQuery = `
-        INSERT INTO vendor (
+        INSERT INTO vendor_master (
           VendorName, VendorCode, VendorMobileNo, VendorAddress,
           HouseFlatNo, StreetLocality, City, State, PinCode, Country,
           VendorAlternateNo, VendorAadhar, VendorPAN, CompanyName, VendorCompanyUdhyam,
@@ -306,7 +306,7 @@ module.exports = (pool) => {
 
       // Fetch the created vendor with all information
       const [newVendor] = await pool.query(
-        'SELECT * FROM vendor WHERE VendorID = ?',
+        'SELECT * FROM vendor_master WHERE VendorID = ?',
         [result.insertId]
       );
 
@@ -372,7 +372,7 @@ module.exports = (pool) => {
       }
 
       // Check if vendor exists
-      const [existingVendor] = await pool.query('SELECT * FROM vendor WHERE VendorID = ?', [id]);
+      const [existingVendor] = await pool.query('SELECT * FROM vendor_master WHERE VendorID = ?', [id]);
       if (existingVendor.length === 0) {
         return res.status(404).json({ error: 'Vendor not found' });
       }
@@ -418,7 +418,7 @@ module.exports = (pool) => {
 
       // Build comprehensive UPDATE query for existing vendor table
       const updateQuery = `
-        UPDATE vendor SET
+        UPDATE vendor_master SET
           VendorName = ?, VendorMobileNo = ?, VendorAddress = ?,
           HouseFlatNo = ?, StreetLocality = ?, City = ?, State = ?, PinCode = ?, Country = ?,
           VendorAlternateNo = ?, VendorAadhar = ?, VendorPAN = ?,
@@ -482,7 +482,7 @@ module.exports = (pool) => {
 
       // Fetch the updated vendor with all information
       const [updatedVendor] = await pool.query(
-        'SELECT * FROM vendor WHERE VendorID = ?',
+        'SELECT * FROM vendor_master WHERE VendorID = ?',
         [id]
       );
 
@@ -499,7 +499,7 @@ module.exports = (pool) => {
     const { id } = req.params;
     try {
       // Get vendor data to delete associated files
-      const [vendor] = await pool.query('SELECT * FROM vendor WHERE VendorID = ?', [id]);
+      const [vendor] = await pool.query('SELECT * FROM vendor_master WHERE VendorID = ?', [id]);
       if (vendor.length === 0) {
         return res.status(404).json({ error: 'Vendor not found' });
       }
@@ -522,7 +522,7 @@ module.exports = (pool) => {
       });
 
       // Delete the vendor record
-      const [result] = await pool.query('DELETE FROM vendor WHERE VendorID = ?', [id]);
+      const [result] = await pool.query('DELETE FROM vendor_master WHERE VendorID = ?', [id]);
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Vendor not found' });
       }
@@ -564,7 +564,7 @@ module.exports = (pool) => {
       console.log(`🗑️ Deleting vendor file - ID: ${id}, Field: ${fieldName}`);
 
       // Get current vendor data to find the file path
-      const [vendors] = await pool.query('SELECT * FROM vendor WHERE VendorID = ?', [id]);
+      const [vendors] = await pool.query('SELECT * FROM vendor_master WHERE VendorID = ?', [id]);
 
       if (vendors.length === 0) {
         return res.status(404).json({ error: 'Vendor not found' });
@@ -585,7 +585,7 @@ module.exports = (pool) => {
       }
 
       // Update database to remove file reference
-      const updateQuery = `UPDATE vendor SET ${fieldName} = NULL WHERE VendorID = ?`;
+      const updateQuery = `UPDATE vendor_master SET ${fieldName} = NULL WHERE VendorID = ?`;
       await pool.query(updateQuery, [id]);
 
       console.log(`✅ Vendor file deleted successfully - ID: ${id}, Field: ${fieldName}`);

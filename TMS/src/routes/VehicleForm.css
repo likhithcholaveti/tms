@@ -866,3 +866,125 @@
   font-weight: 600;
   font-family: 'Courier New', monospace;
 }
+
+/* Expiry Status Indicators */
+.expiry-expired {
+  border-left: 4px solid #dc3545 !important;
+  background: rgba(220, 53, 69, 0.05) !important;
+}
+
+.expiry-critical {
+  border-left: 4px solid #fd7e14 !important;
+  background: rgba(253, 126, 20, 0.05) !important;
+}
+
+.expiry-warning {
+  border-left: 4px solid #ffc107 !important;
+  background: rgba(255, 193, 7, 0.05) !important;
+}
+
+.expiry-indicator {
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.expiry-indicator.expired {
+  background: #dc3545;
+  color: white;
+  animation: pulse-red 2s infinite;
+}
+
+.expiry-indicator.critical {
+  background: #fd7e14;
+  color: white;
+  animation: pulse-orange 2s infinite;
+}
+
+.expiry-indicator.warning {
+  background: #ffc107;
+  color: #212529;
+  animation: pulse-yellow 2s infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes pulse-orange {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes pulse-yellow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Input with Unit Styling */
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.input-with-unit input {
+  flex: 1;
+  padding-right: 60px; /* Space for unit indicator */
+}
+
+.unit-indicator {
+  position: absolute;
+  right: 12px;
+  color: #6c757d;
+  font-weight: 600;
+  font-size: 14px;
+  pointer-events: none;
+  background: white;
+  padding: 0 4px;
+}
+
+.field-hint {
+  display: block;
+  margin-top: 4px;
+  color: #6c757d;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Enhanced Form Field Styling */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-field-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.required-indicator {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.photo-indicator {
+  color: #17a2b8;
+}
+
+.expiry-indicator {
+  color: #ffc107;
+}
+
+.crm-indicator {
+  color: #28a745;
+}

@@ -210,6 +210,112 @@ const VehicleForm = () => {
   // New state for enhanced features
   const [vehiclePhotos, setVehiclePhotos] = useState({});
 
+  // Expiry date reminder logic with red flag popups
+  const checkExpiryDates = (vehicleData) => {
+    const today = new Date();
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(today.getDate() + 7);
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+    const expiryFields = [
+      { field: 'VehicleInsuranceExpiry', label: 'Vehicle Insurance', date: vehicleData.VehicleInsuranceExpiry },
+      { field: 'VehicleFitnessCertificateExpiry', label: 'Fitness Certificate', date: vehicleData.VehicleFitnessCertificateExpiry },
+      { field: 'VehiclePollutionExpiry', label: 'Pollution Certificate', date: vehicleData.VehiclePollutionExpiry },
+      { field: 'StateTaxExpiry', label: 'State Tax', date: vehicleData.StateTaxExpiry },
+      { field: 'NoEntryPassExpiry', label: 'No Entry Pass', date: vehicleData.NoEntryPassExpiry }
+    ];
+
+    expiryFields.forEach(({ field, label, date }) => {
+      if (date) {
+        const expiryDate = new Date(date);
+        if (expiryDate < today) {
+          // Expired - Red flag
+          showExpiryAlert('danger', `${label} has EXPIRED!`, `Expired on ${formatDateForInput(date)}`, field);
+        } else if (expiryDate <= sevenDaysFromNow) {
+          // Expires within 7 days - Critical warning
+          const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+          showExpiryAlert('warning', `${label} expires soon!`, `Expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''} (${formatDateForInput(date)})`, field);
+        } else if (expiryDate <= thirtyDaysFromNow) {
+          // Expires within 30 days - Regular warning
+          const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+          apiHelpers.showWarning(`${label} expires in ${daysUntilExpiry} days (${formatDateForInput(date)})`);
+        }
+      }
+    });
+  };
+
+  // Show red flag popup for critical expiry alerts
+  const showExpiryAlert = (type, title, message, fieldName) => {
+    // Create a custom alert modal for critical expiries
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type === 'danger' ? 'danger' : 'warning'} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = `
+      top: 20px;
+      right: 20px;
+      z-index: 9999;
+      min-width: 350px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      border: 2px solid ${type === 'danger' ? '#dc3545' : '#ffc107'};
+    `;
+
+    alertDiv.innerHTML = `
+      <div class="d-flex align-items-start">
+        <div class="me-3">
+          <i class="fas fa-exclamation-triangle fa-2x text-${type === 'danger' ? 'danger' : 'warning'}"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h6 class="alert-heading mb-1">${title}</h6>
+          <p class="mb-2">${message}</p>
+          <button class="btn btn-sm btn-outline-${type === 'danger' ? 'danger' : 'warning'} me-2" onclick="document.getElementById('${fieldName}').focus(); this.parentElement.parentElement.parentElement.remove();">
+            Fix Now
+          </button>
+        </div>
+        <button type="button" class="btn-close" onclick="this.parentElement.parentElement.remove();"></button>
+      </div>
+    `;
+
+    document.body.appendChild(alertDiv);
+
+    // Auto-remove after 10 seconds for danger alerts, 7 seconds for warnings
+    setTimeout(() => {
+      if (alertDiv.parentElement) {
+        alertDiv.remove();
+      }
+    }, type === 'danger' ? 10000 : 7000);
+  };
+
+  // Check expiry dates when vehicle data changes
+  useEffect(() => {
+    if (vehicleData && Object.keys(vehicleData).length > 0) {
+      checkExpiryDates(vehicleData);
+    }
+  }, [
+    vehicleData.VehicleInsuranceExpiry,
+    vehicleData.VehicleFitnessCertificateExpiry,
+    vehicleData.VehiclePollutionExpiry,
+    vehicleData.StateTaxExpiry,
+    vehicleData.NoEntryPassExpiry
+  ]);
+
+  // Helper function to get expiry status for date fields
+  const getExpiryStatus = (fieldName, dateValue) => {
+    if (!dateValue) return null;
+
+    const today = new Date();
+    const expiryDate = new Date(dateValue);
+    const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+
+    if (expiryDate < today) {
+      return { status: 'expired', message: 'EXPIRED', className: 'expiry-expired' };
+    } else if (daysUntilExpiry <= 7) {
+      return { status: 'critical', message: `${daysUntilExpiry} days left`, className: 'expiry-critical' };
+    } else if (daysUntilExpiry <= 30) {
+      return { status: 'warning', message: `${daysUntilExpiry} days left`, className: 'expiry-warning' };
+    }
+    return null;
+  };
+
   useEffect(() => {
     fetchVehicles();
   }, []);
@@ -392,8 +498,8 @@ const VehicleForm = () => {
     // Check if it's already a full URL
     if (imagePath.startsWith('http')) return imagePath;
 
-    // Create URL for server-stored image - use backend port 3003
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003';
+    // Create URL for server-stored image - use backend port 3004
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
 
     // Extract just the filename from the path
     let filename = imagePath;
@@ -948,13 +1054,21 @@ const VehicleForm = () => {
 
     const id = `vehicle-${name}`;
 
+    // Check for expiry status on date fields
+    const expiryStatus = (type === 'date' && vehicleData[name]) ? getExpiryStatus(name, vehicleData[name]) : null;
+
     return (
-      <div className={`form-group ${options.fullWidth ? 'full-width' : ''}`}>
+      <div className={`form-group ${options.fullWidth ? 'full-width' : ''} ${expiryStatus ? expiryStatus.className : ''}`}>
         <label htmlFor={id}>
           {label} {required && <span className="required-indicator">*</span>}
           {name.includes('Photo') && <span className="photo-indicator"> 📷</span>}
           {name.includes('Expiry') && <span className="expiry-indicator"> ⚠️</span>}
           {name.includes('CRM') && <span className="crm-indicator"> 🔗</span>}
+          {expiryStatus && (
+            <span className={`expiry-indicator ${expiryStatus.status}`}>
+              {expiryStatus.message}
+            </span>
+          )}
         </label>
         
         {isRadio ? (
@@ -1269,7 +1383,26 @@ const VehicleForm = () => {
                   onChange={handleInputChange}
                   accept=".jpg,.jpeg,.png"
                 />
-                {renderFormField('Vehicle Loading Capacity (in KG)', 'VehicleLoadingCapacity', 'number', { placeholder: 'Numeric capacity in KG' })}
+                <div className="form-field">
+                  <label className="form-field-label">
+                    Vehicle Loading Capacity <span className="required-indicator">*</span>
+                  </label>
+                  <div className="input-with-unit">
+                    <input
+                      type="number"
+                      name="VehicleLoadingCapacity"
+                      value={vehicleData.VehicleLoadingCapacity}
+                      onChange={handleInputChange}
+                      placeholder="Enter capacity"
+                      required
+                      min="0"
+                      className={errors.VehicleLoadingCapacity ? 'error' : ''}
+                    />
+                    <span className="unit-indicator">KG</span>
+                  </div>
+                  {errors.VehicleLoadingCapacity && <div className="form-field-error">{errors.VehicleLoadingCapacity}</div>}
+                  <small className="field-hint">Enter the maximum loading capacity in kilograms</small>
+                </div>
                 {renderFormField('GPS', 'GPS', 'radio', { values: ['Yes', 'No'] })}
                 {renderFormField('GPS Company', 'GPSCompany', 'text', { placeholder: 'GPS provider name' })}
                 {renderFormField('No Entry Pass ⚠️', 'NoEntryPass', 'radio', { values: ['Yes', 'No'] })}

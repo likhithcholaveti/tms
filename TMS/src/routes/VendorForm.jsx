@@ -13,6 +13,14 @@ import Dropdown from '../components/Dropdown';
 import './VendorForm.css';
 
 const VendorForm = () => {
+  // Validation patterns
+  const patterns = {
+    mobile: /^[6-9]\d{9}$/,
+    aadhar: /^\d{12}$/,
+    pan: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
+    gst: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+  };
+
   const getInitialState = () => ({
     // Basic Information
     vendor_name: '',
@@ -43,7 +51,28 @@ const VendorForm = () => {
 
     // Bank Details (legacy field - will be replaced by structured bank details)
     bank_details: '',
+
+    // File URLs for existing files
+    vendor_photo_url: null,
+    vendor_aadhar_doc_url: null,
+    vendor_pan_doc_url: null,
+    vendor_company_udhyam_doc_url: null,
+    vendor_company_pan_doc_url: null,
+    vendor_company_gst_doc_url: null,
+    company_legal_docs_url: null,
+    bank_cheque_upload_url: null,
+
+    // Company address fields
+    address_of_company_house_flat_no: '',
+    address_of_company_street_locality: '',
+    address_of_company_city: '',
+    address_of_company_state: '',
+    address_of_company_pin_code: '',
+    address_of_company_country: 'India',
   });
+
+  // Initialize vendorData state
+  const [vendorData, setVendorData] = useState(getInitialState());
 
   // Structured Bank Details State
   const [bankDetails, setBankDetails] = useState({
@@ -318,8 +347,8 @@ const VendorForm = () => {
       return imagePath;
     }
 
-    // Create URL for server-stored image - use backend port 3003
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003';
+    // Create URL for server-stored image - use backend port 3004
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
 
     // Extract just the filename from the path
     let filename = imagePath;

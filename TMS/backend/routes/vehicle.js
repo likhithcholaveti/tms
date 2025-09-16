@@ -1262,5 +1262,25 @@ module.exports = (pool) => {
     }
   });
 
+  // Validate vehicle existence by registration number
+  router.get('/validate/by-reg-no/:regNo', async (req, res) => {
+    const { regNo } = req.params;
+    try {
+      const [rows] = await pool.query(
+        'SELECT VehicleID FROM vehicle WHERE VehicleRegistrationNo = ?',
+        [regNo]
+      );
+
+      if (rows.length > 0) {
+        res.json({ exists: true, vehicleId: rows[0].VehicleID });
+      } else {
+        res.json({ exists: false });
+      }
+    } catch (error) {
+      console.error('Error validating vehicle by registration number:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   return router;
 };

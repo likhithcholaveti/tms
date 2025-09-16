@@ -203,8 +203,8 @@ const DriverForm = () => {
     // Check if it's already a full URL
     if (imagePath.startsWith('http')) return imagePath;
 
-    // Create URL for server-stored image - use backend port 3003
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003';
+    // Create URL for server-stored image - use backend port 3004
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
 
     // Extract just the filename from the path
     let filename = imagePath;

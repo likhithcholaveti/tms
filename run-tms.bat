@@ -21,5 +21,5 @@ npm install
 echo Starting frontend server...
 start cmd /k "npm run dev"
 
-echo TMS application setup complete. Backend running on port 3003, frontend on port 5173.
+echo TMS application setup complete. Backend running on port 3004, frontend on port 5174.
 pause

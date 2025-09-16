@@ -8,7 +8,7 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
-const PORT = 3004; // Fixed port to avoid conflicts
+const PORT = 3005; // Temporary port for testing
 
 // Middleware
 app.use(cors());

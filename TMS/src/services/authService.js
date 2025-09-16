@@ -1,6 +1,6 @@
 // Authentication Service for JWT handling
 
-const API_BASE_URL = 'http://localhost:3003/api';
+const API_BASE_URL = 'http://localhost:3004/api';
 
 class AuthService {
   // Get JWT token from localStorage

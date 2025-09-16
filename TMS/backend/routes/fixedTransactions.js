@@ -121,7 +121,8 @@ router.post('/', async (req, res) => {
       TotalDeliveries,
       TotalDeliveriesAttempted,
       TotalDeliveriesDone,
-      TotalDutyHours,
+      // TotalDutyHours, // This will be calculated
+      OvertimeCostPerHour, // New field
 
       // Freight info
       VFreightFix,
@@ -185,6 +186,7 @@ router.post('/', async (req, res) => {
       // Manual entry fields
       VehicleNumber,
       VendorName,
+      VendorCode, // New field
       VendorNumber,
       DriverName,
       DriverNumber,
@@ -207,6 +209,41 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Time validation (HH:MM format)
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (ArrivalTimeAtHub && !timeRegex.test(ArrivalTimeAtHub)) {
+        return res.status(400).json({ success: false, error: 'Invalid ArrivalTimeAtHub format. Use HH:MM.' });
+    }
+    if (ReturnReportingTime && !timeRegex.test(ReturnReportingTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid ReturnReportingTime format. Use HH:MM.' });
+    }
+
+    let totalDutyHours = null;
+    if (ArrivalTimeAtHub && ReturnReportingTime) {
+        const [arrivalHour, arrivalMinute] = ArrivalTimeAtHub.split(':').map(Number);
+        const [returnHour, returnMinute] = ReturnReportingTime.split(':').map(Number);
+
+        let arrival = new Date();
+        arrival.setHours(arrivalHour, arrivalMinute, 0, 0);
+
+        let departure = new Date();
+        departure.setHours(returnHour, returnMinute, 0, 0);
+
+        if (departure <= arrival) {
+            // If return time is earlier or same, assume it's for the next day for calculation
+            departure.setDate(departure.getDate() + 1);
+        }
+
+        const diffMs = departure - arrival;
+        totalDutyHours = diffMs / (1000 * 60 * 60);
+
+        // Add validation for trip duration
+        if (totalDutyHours >= 24) {
+            return res.status(400).json({ success: false, error: 'Return time seems incorrect, resulting in a duration of 24 hours or more.' });
+        }
+    }
+
+
     // Convert single VehicleID/DriverID to JSON arrays for database
     const VehicleIDs = VehicleID ? JSON.stringify([VehicleID]) : null;
     const DriverIDs = DriverID ? JSON.stringify([DriverID]) : null;
@@ -217,17 +254,17 @@ router.post('/', async (req, res) => {
         ReplacementDriverID, ReplacementDriverName, ReplacementDriverNo,
         ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime,
         OpeningKM, ClosingKM, TotalDeliveries, TotalDeliveriesAttempted, TotalDeliveriesDone,
-        TotalDutyHours, VFreightFix, FixKm, VFreightVariable, TotalFreight,
+        TotalDutyHours, OvertimeCostPerHour, VFreightFix, FixKm, VFreightVariable, TotalFreight,
         TollExpenses, ParkingCharges, LoadingCharges, UnloadingCharges, OtherCharges, OtherChargesRemarks,
         HandlingCharges, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
         AdvancePaidAmount, AdvancePaidMode, AdvancePaidDate, AdvancePaidBy, EmployeeDetailsAdvance,
         BalanceToBePaid, BalancePaidAmount, Variance, BalancePaidDate, BalancePaidBy, EmployeeDetailsBalance,
         Revenue, Margin, MarginPercentage, DriverAadharDoc, DriverLicenceDoc, TollExpensesDoc, ParkingChargesDoc,
         OutTimeFrom, TotalShipmentsForDeliveries, TotalShipmentDeliveriesAttempted, TotalShipmentDeliveriesDone,
-        TripNo, VehicleNumber, VendorName, VendorNumber, DriverName, DriverNumber, DriverAadharNumber,
+        TripNo, VehicleNumber, VendorName, VendorCode, VendorNumber, DriverName, DriverNumber, DriverAadharNumber,
         DriverLicenceNumber, VehicleType, CompanyName, GSTNo, CustomerSite, Location,
         Remarks, Status, TripClose
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const values = [
@@ -235,14 +272,14 @@ router.post('/', async (req, res) => {
       ReplacementDriverID, ReplacementDriverName, ReplacementDriverNo,
       ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime,
       OpeningKM, ClosingKM, TotalDeliveries, TotalDeliveriesAttempted, TotalDeliveriesDone,
-      TotalDutyHours, VFreightFix, FixKm, VFreightVariable, TotalFreight,
+      totalDutyHours, OvertimeCostPerHour, VFreightFix, FixKm, VFreightVariable, TotalFreight,
       TollExpenses, ParkingCharges, LoadingCharges, UnloadingCharges, OtherCharges, OtherChargesRemarks,
       HandlingCharges, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
       AdvancePaidAmount, AdvancePaidMode, AdvancePaidDate, AdvancePaidBy, EmployeeDetailsAdvance,
       BalanceToBePaid, BalancePaidAmount, Variance, BalancePaidDate, BalancePaidBy, EmployeeDetailsBalance,
       Revenue, Margin, MarginPercentage, DriverAadharDoc, DriverLicenceDoc, TollExpensesDoc, ParkingChargesDoc,
       OutTimeFrom, TotalShipmentsForDeliveries, TotalShipmentDeliveriesAttempted, TotalShipmentDeliveriesDone,
-      TripNo, VehicleNumber, VendorName, VendorNumber, DriverName, DriverNumber, DriverAadharNumber,
+      TripNo, VehicleNumber, VendorName, VendorCode, VendorNumber, DriverName, DriverNumber, DriverAadharNumber,
       DriverLicenceNumber, VehicleType, CompanyName, GSTNo, CustomerSite, Location,
       Remarks, Status, TripClose
     ];
@@ -254,7 +291,8 @@ router.post('/', async (req, res) => {
       message: 'Fixed transaction created successfully',
       data: {
         TransactionID: result.insertId,
-        ...req.body
+        ...req.body,
+        TotalDutyHours: totalDutyHours // Also return calculated duty hours
       }
     });
   } catch (error) {
@@ -279,6 +317,48 @@ router.put('/:id', async (req, res) => {
     // Remove TransactionID from update fields if present
     delete updateFields.TransactionID;
     delete updateFields.CreatedAt;
+
+    // Time validation (HH:MM format)
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (updateFields.ArrivalTimeAtHub && !timeRegex.test(updateFields.ArrivalTimeAtHub)) {
+        return res.status(400).json({ success: false, error: 'Invalid ArrivalTimeAtHub format. Use HH:MM.' });
+    }
+    if (updateFields.ReturnReportingTime && !timeRegex.test(updateFields.ReturnReportingTime)) {
+        return res.status(400).json({ success: false, error: 'Invalid ReturnReportingTime format. Use HH:MM.' });
+    }
+
+    // Recalculate TotalDutyHours if timing fields are updated
+    if (updateFields.ArrivalTimeAtHub || updateFields.ReturnReportingTime) {
+        const [existing] = await pool.query('SELECT ArrivalTimeAtHub, ReturnReportingTime FROM fixed_transactions WHERE TransactionID = ?', [id]);
+        const arrivalTimeValue = updateFields.ArrivalTimeAtHub || (existing.length > 0 ? existing[0].ArrivalTimeAtHub : null);
+        const returnTimeValue = updateFields.ReturnReportingTime || (existing.length > 0 ? existing[0].ReturnReportingTime : null);
+
+        if (arrivalTimeValue && returnTimeValue) {
+            const [arrivalHour, arrivalMinute] = arrivalTimeValue.split(':').map(Number);
+            const [returnHour, returnMinute] = returnTimeValue.split(':').map(Number);
+
+            let arrival = new Date();
+            arrival.setHours(arrivalHour, arrivalMinute, 0, 0);
+
+            let departure = new Date();
+            departure.setHours(returnHour, returnMinute, 0, 0);
+
+            if (departure <= arrival) {
+                // If return time is earlier or same, assume it's for the next day for calculation
+                departure.setDate(departure.getDate() + 1);
+            }
+
+            const diffMs = departure - arrival;
+            const totalDutyHours = diffMs / (1000 * 60 * 60);
+
+            // Add validation for trip duration
+            if (totalDutyHours >= 24) {
+                return res.status(400).json({ success: false, error: 'Return time seems incorrect, resulting in a duration of 24 hours or more.' });
+            }
+            updateFields.TotalDutyHours = totalDutyHours;
+        }
+    }
+
 
     // Handle VehicleID/DriverID conversion to JSON arrays
     if (updateFields.VehicleID && !updateFields.VehicleIDs) {

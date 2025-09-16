@@ -86,7 +86,7 @@ module.exports = (pool) => {
 
   // Helper function to add file URLs to customer data
   const addFileUrls = (customer) => {
-    const baseUrl = 'http://localhost:3003/api/customers/files/';
+    const baseUrl = 'http://localhost:3004/api/customers/files/';
 
     if (customer.AgreementFile) {
       // Extract just the filename from the stored path
@@ -230,7 +230,7 @@ module.exports = (pool) => {
         if (files.PerformanceReportFile) filePaths.PerformanceReportFile = files.PerformanceReportFile[0].filename;
       }
 
-      const [result] = await pool.query(`
+      const [results] = await pool.query(`
         INSERT INTO Customer (
           MasterCustomerName, Name, CustomerCode, ServiceCode, TypeOfServices, Locations, CustomerSite,
           CustomerMobileNo, AlternateMobileNo, CustomerEmail, CustomerContactPerson, CustomerGroup, CityName,
@@ -246,56 +246,70 @@ module.exports = (pool) => {
           CustomerImportantPersonAddress1, CustomerImportantPersonAddress2
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
-        customer.MasterCustomerName, customer.Name, customerCode, customer.ServiceCode, customer.TypeOfServices, customer.Locations, customer.CustomerSite,
-        customer.CustomerMobileNo, customer.AlternateMobileNo, customer.CustomerEmail, customer.CustomerContactPerson, customer.CustomerGroup, customer.CityName,
-        customer.house_flat_no || null, customer.street_locality || null, customer.city || null, customer.state || null, customer.pin_code || null, customer.country || 'India',
-        customer.Agreement, filePaths.AgreementFile || null, customer.AgreementDate || null,
-        customer.AgreementTenure, customer.AgreementExpiryDate || null, customer.CustomerNoticePeriod,
-        customer.CogentNoticePeriod, customer.CreditPeriod, customer.Insurance,
-        customer.MinimumInsuranceValue || null, customer.CogentDebitClause,
-        customer.CogentDebitLimit || null, customer.BG, filePaths.BGFile || null,
+        customer.MasterCustomerName || null, customer.Name || null, customerCode || null, customer.ServiceCode || null, customer.TypeOfServices || null, customer.Locations || null, customer.CustomerSite || null,
+        customer.CustomerMobileNo || null, customer.AlternateMobileNo || null, customer.CustomerEmail || null, customer.CustomerContactPerson || null, customer.CustomerGroup || null, customer.CityName || null,
+        customer.HouseFlatNo || null, customer.StreetLocality || null, customer.CustomerCity || null, customer.CustomerState || null, customer.CustomerPinCode || null, customer.CustomerCountry || 'India',
+        customer.Agreement || null, filePaths.AgreementFile || null, customer.AgreementDate || null,
+        customer.AgreementTenure || null, customer.AgreementExpiryDate || null, customer.CustomerNoticePeriod || null,
+        customer.CogentNoticePeriod || null, customer.CreditPeriod || null, customer.Insurance || null,
+        customer.MinimumInsuranceValue || null, customer.CogentDebitClause || null,
+        customer.CogentDebitLimit || null, customer.BG || null, filePaths.BGFile || null,
         customer.BGAmount || null, customer.BGDate || null, customer.BGExpiryDate || null,
-        customer.BGBank, customer.BGReceivingByCustomer, filePaths.BGReceivingFile || null,
-        customer.PO, filePaths.POFile || null, customer.PODate || null, customer.POValue || null, customer.POTenure,
-        customer.POExpiryDate || null, customer.Rates, filePaths.RatesAnnexureFile || null, customer.YearlyEscalationClause,
-        customer.GSTNo, customer.GSTRate, customer.TypeOfBilling, customer.BillingTenure,
+        customer.BGBank || null, customer.BGReceivingByCustomer || null, filePaths.BGReceivingFile || null,
+        customer.PO || null, filePaths.POFile || null, customer.PODate || null, customer.POValue || null, customer.POTenure || null,
+        customer.POExpiryDate || null, customer.Rates || null, filePaths.RatesAnnexureFile || null, customer.YearlyEscalationClause || null,
+        customer.GSTNo || null, customer.GSTRate || null, customer.TypeOfBilling || null, customer.BillingTenure || null,
         filePaths.MISFormatFile || null, filePaths.KPISLAFile || null, filePaths.PerformanceReportFile || null,
-        customer.CustomerRegisteredOfficeAddress, customer.CustomerCorporateOfficeAddress,
-        customer.CogentProjectHead, customer.CogentProjectOpsManager,
-        customer.CustomerImportantPersonAddress1, customer.CustomerImportantPersonAddress2
+        customer.CustomerRegisteredOfficeAddress || null, customer.CustomerCorporateOfficeAddress || null,
+        customer.CogentProjectHead || null, customer.CogentProjectOpsManager || null,
+        customer.CustomerImportantPersonAddress1 || null, customer.CustomerImportantPersonAddress2 || null
       ]);
-      
-      const customerId = result.insertId;
+
+      const customerId = results.insertId;
+
+      // Insert related data using Promise.all for parallel execution
+      const insertPromises = [];
 
       // Insert customer office addresses
       if (customer.CustomerOfficeAddress && Array.isArray(customer.CustomerOfficeAddress)) {
-        for (const address of customer.CustomerOfficeAddress) {
-          await pool.query('INSERT INTO customer_office_address (CustomerID, OfficeType, ContactPerson, Department, Designation, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-            customerId, address.OfficeType, address.ContactPerson, address.Department, address.Designation, address.Mobile, address.Email, address.DOB, address.Address
-          ]);
-        }
+        customer.CustomerOfficeAddress.forEach(address => {
+          insertPromises.push(
+            pool.query('INSERT INTO customer_office_address (CustomerID, OfficeType, ContactPerson, Department, Designation, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+              customerId, address.OfficeType, address.ContactPerson, address.Department, address.Designation, address.Mobile, address.Email, address.DOB, address.Address
+            ])
+          );
+        });
       }
 
       // Insert key contacts
       if (customer.CustomerKeyContact && Array.isArray(customer.CustomerKeyContact)) {
-        for (const contact of customer.CustomerKeyContact) {
-          await pool.query('INSERT INTO customer_key_contact (CustomerID, Name, Department, Designation, Location, OfficeType, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-            customerId, contact.Name, contact.Department, contact.Designation, contact.Location, contact.OfficeType, contact.Mobile, contact.Email, contact.DOB, contact.Address
-          ]);
-        }
+        customer.CustomerKeyContact.forEach(contact => {
+          insertPromises.push(
+            pool.query('INSERT INTO customer_key_contact (CustomerID, Name, Department, Designation, Location, OfficeType, Mobile, Email, DOB, Address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+              customerId, contact.Name, contact.Department, contact.Designation, contact.Location, contact.OfficeType, contact.Mobile, contact.Email, contact.DOB, contact.Address
+            ])
+          );
+        });
       }
 
       // Insert cogent contacts
       if (customer.CustomerCogentContact) {
         const cogent = customer.CustomerCogentContact;
-        await pool.query('INSERT INTO customer_cogent_contact (CustomerID, CustomerOwner, ProjectHead, OpsHead, OpsManager, Supervisor) VALUES (?, ?, ?, ?, ?, ?)', [
-          customerId, cogent.CustomerOwner, cogent.ProjectHead, cogent.OpsHead, cogent.OpsManager, cogent.Supervisor
-        ]);
+        insertPromises.push(
+          pool.query('INSERT INTO customer_cogent_contact (CustomerID, CustomerOwner, ProjectHead, OpsHead, OpsManager, Supervisor) VALUES (?, ?, ?, ?, ?, ?)', [
+            customerId, cogent.CustomerOwner, cogent.ProjectHead, cogent.OpsHead, cogent.OpsManager, cogent.Supervisor
+          ])
+        );
       }
 
-      res.status(201).json({ 
-        CustomerID: customerId, 
-        CustomerCode: customerCode, 
+      // Wait for all insertions to complete
+      if (insertPromises.length > 0) {
+        await Promise.all(insertPromises);
+      }
+
+      res.status(201).json({
+        CustomerID: customerId,
+        CustomerCode: customerCode,
         ...customer,
         ...filePaths
       });

@@ -1,38 +1,26 @@
-# TMS Missing Features Implementation
+# TODO: Implement 12-Hour Time Format Validation and Enforcement
 
-## 1. Fix Export.js Query Issues
-- [ ] Fix missing 'BillingMonthStartDate' column error in customer export
-- [ ] Update export query to handle optional database columns
-- [ ] Test export functionality for all entities
+## Tasks to Complete:
+- [ ] Update TMS/src/routes/AdhocTransactionForm.jsx - Change time inputs to type="text" with 12hr format validation
+- [ ] Update TMS/src/routes/DailyVehicleTransactionForm.jsx - Use existing 12hr utility functions for validation
+- [ ] Update TMS/src/routes/FixedTransactionForm.jsx - Change time inputs to type="text" with 12hr format validation
+- [ ] Add 12hr utility functions to forms that don't have them
+- [ ] Update form submission to convert 12hr to 24hr format before sending to backend
+- [ ] Test the forms to ensure 12hr time inputs work correctly
+- [ ] Test API calls to ensure time values are correctly converted and processed
 
-## 2. Create Notification/Reminder System
-- [ ] Create Notification component for expiry alerts
-- [ ] Implement date comparison logic for expiry dates
-- [ ] Add reminder system for Agreement, BG, PO expiry dates
-- [ ] Create popup/modal system for notifications
+## Files to Edit:
+1. TMS/src/routes/AdhocTransactionForm.jsx
+2. TMS/src/routes/DailyVehicleTransactionForm.jsx
+3. TMS/src/routes/FixedTransactionForm.jsx
 
-## 3. Add Import/Export UI Components
-- [ ] Add export buttons to CustomerForm and BillingForm
-- [ ] Create import functionality for customer data
-- [ ] Add file upload UI for bulk data import
-- [ ] Implement progress indicators for import/export operations
+## Changes Needed:
+- Change input type from "time" to "text" for ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime
+- Add 12-hour format validation using regex: /^(0?[1-9]|1[0-2]):([0-5][0-9])\s?(AM|PM|am|pm)$/i
+- Add utility functions for 12hr to 24hr conversion
+- Update validation logic to enforce 12-hour format input
+- Convert 12hr format to 24hr before sending to backend
+- Add placeholder text like "HH:MM AM/PM" for user guidance
+- Backend already supports HH:MM format, so no changes needed there
 
-## 4. Implement Expiry Date Alerts
-- [ ] Add expiry date tracking for customer agreements
-- [ ] Create alert system for approaching expiry dates
-- [ ] Add visual indicators (colors, icons) for expiry status
-- [ ] Implement email notifications for critical expiries
-
-## 5. Daily Transaction Time Format Validation (12-hour)
-- [ ] Implement 12-hour time format validation for DailyVehicleTransactionForm
-- [ ] Add time format conversion utilities (12h ↔ 24h)
-- [ ] Update time input fields to accept 12-hour format (HH:MM AM/PM)
-- [ ] Add real-time validation for time format
-- [ ] Update duty hours calculation to work with 12-hour format
-- [ ] Test time format validation across all time fields
-
-## 6. Testing and Validation
-- [ ] Test all new notification features
-- [ ] Validate import/export functionality
-- [ ] Test expiry date calculations
-- [ ] Perform end-to-end testing of all features
+## Status: In Progress

@@ -18,55 +18,10 @@ const formatDateForInput = (dateString) => {
   return date.toISOString().split('T')[0];
 };
 
-// Time utility functions for 12-hour format validation
-const isValid12HourTime = (timeString) => {
-  if (!timeString || typeof timeString !== 'string') return false;
+  // Remove 12-hour format validation and conversion functions
+  // Time fields will use input type="time" with 24-hour HH:MM format
 
-  // Regex for 12-hour format: HH:MM AM/PM or H:MM AM/PM
-  const timeRegex = /^(0?[1-9]|1[0-2]):([0-5][0-9])\s?(AM|PM|am|pm)$/i;
-  return timeRegex.test(timeString.trim());
-};
-
-const convert12HourTo24Hour = (time12h) => {
-  if (!time12h || !isValid12HourTime(time12h)) return null;
-
-  const [time, period] = time12h.trim().split(/\s+/);
-  let [hours, minutes] = time.split(':').map(Number);
-
-  if (period.toUpperCase() === 'PM' && hours !== 12) {
-    hours += 12;
-  } else if (period.toUpperCase() === 'AM' && hours === 12) {
-    hours = 0;
-  }
-
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-};
-
-const convert24HourTo12Hour = (time24h) => {
-  if (!time24h || typeof time24h !== 'string') return '';
-
-  const [hours, minutes] = time24h.split(':').map(Number);
-  const period = hours >= 12 ? 'PM' : 'AM';
-  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-
-  return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-};
-
-const formatTimeForDisplay = (timeString) => {
-  if (!timeString) return '';
-
-  // If already in 12-hour format, return as is
-  if (isValid12HourTime(timeString)) {
-    return timeString;
-  }
-
-  // If in 24-hour format, convert to 12-hour
-  if (/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeString)) {
-    return convert24HourTo12Hour(timeString);
-  }
-
-  return timeString;
-};
+  // Remove isValid12HourTime, convert12HourTo24Hour, convert24HourTo12Hour, formatTimeForDisplay functions
 
 const DailyVehicleTransactionForm = () => {
   // Master data (Grey Section)
@@ -156,41 +111,7 @@ const DailyVehicleTransactionForm = () => {
     DriverAadharNumber: '',
     DriverAadharDoc: null,
     DriverLicenceNumber: '',
-    DriverLicenceDoc: null,
-    TotalShipmentsForDeliveries: '',
-    TotalShipmentDeliveriesAttempted: '',
-    TotalShipmentDeliveriesDone: '',
-    VFreightFix: '',
-    FixKm: '',
-    VFreightVariable: '',
-    TollExpenses: '',
-    TollExpensesDoc: null,
-    ParkingCharges: '',
-    ParkingChargesDoc: null,
-    LoadingCharges: '',
-    UnloadingCharges: '',
-    OtherCharges: '',
-    OtherChargesRemarks: '',
-    OutTimeFrom: '',
-    TotalFreight: '', // Auto-calculated
-    AdvanceRequestNo: '',
-    AdvanceToPaid: '',
-    AdvanceApprovedAmount: '',
-    AdvanceApprovedBy: '',
-    AdvancePaidAmount: '',
-    AdvancePaidMode: '',
-    AdvancePaidDate: '',
-    AdvancePaidBy: '',
-    EmployeeDetailsAdvance: '',
-    BalanceToBePaid: '',
-    BalancePaidAmount: '',
-    Variance: '',
-    BalancePaidDate: '',
-    BalancePaidBy: '',
-    EmployeeDetailsBalance: '',
-    Revenue: '',
-    Margin: '',
-    MarginPercentage: '' // Auto-calculated
+    DriverLicenceDoc: null
   });
 
   // System calculations (Yellow Section)
@@ -270,15 +191,14 @@ const DailyVehicleTransactionForm = () => {
     }
   }, [transactionData.OpeningKM, transactionData.ClosingKM]);
 
-  // Auto-calculate Total Duty Hours for Adhoc/Replacement
+  // Auto-calculate Total Duty Hours for Adhoc/Replacement using input type="time" format HH:MM
   useEffect(() => {
     if ((masterData.TypeOfTransaction === 'Adhoc' || masterData.TypeOfTransaction === 'Replacement') &&
         transactionData.ArrivalTimeAtHub && transactionData.OutTimeFromHub) {
 
       try {
-        // Convert time strings to Date objects for calculation
-        const arrivalTime = new Date(`2000-01-01T${transactionData.ArrivalTimeAtHub}:00`);
-        const outTime = new Date(`2000-01-01T${transactionData.OutTimeFromHub}:00`);
+        const arrivalTime = new Date(`2000-01-01T${transactionData.ArrivalTimeAtHub}`);
+        const outTime = new Date(`2000-01-01T${transactionData.OutTimeFromHub}`);
 
         if (!isNaN(arrivalTime.getTime()) && !isNaN(outTime.getTime())) {
           let diffMs = outTime - arrivalTime;
@@ -301,25 +221,8 @@ const DailyVehicleTransactionForm = () => {
     }
   }, [transactionData.ArrivalTimeAtHub, transactionData.OutTimeFromHub, masterData.TypeOfTransaction]);
 
-  // Auto-calculate Total Freight for Adhoc/Replacement
-  useEffect(() => {
-    if (masterData.TypeOfTransaction === 'Adhoc' || masterData.TypeOfTransaction === 'Replacement') {
-      const vFreightFix = parseFloat(transactionData.VFreightFix) || 0;
-      const vFreightVariable = parseFloat(transactionData.VFreightVariable) || 0;
-      const totalKM = parseFloat(calculatedData.TotalKM) || 0;
-      const fixKm = parseFloat(transactionData.FixKm) || 0;
-
-      // Calculate variable freight: (Total KM - Fix KM) * Variable Rate
-      const variableKM = Math.max(0, totalKM - fixKm);
-      const variableFreight = variableKM * vFreightVariable;
-      const totalFreight = vFreightFix + variableFreight;
-
-      setTransactionData(prev => ({
-        ...prev,
-        TotalFreight: totalFreight.toFixed(2)
-      }));
-    }
-  }, [transactionData.VFreightFix, transactionData.VFreightVariable, transactionData.FixKm, calculatedData.TotalKM, masterData.TypeOfTransaction]);
+  // No changes needed for other useEffects related to freight, balance, margin etc.
+  // They depend on numeric fields, not time fields
 
   // Auto-calculate Balance to be Paid for Adhoc/Replacement
   useEffect(() => {

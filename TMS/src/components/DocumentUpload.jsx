@@ -27,7 +27,7 @@ const DocumentUpload = ({
         let fileUrl = value;
         if (!value.startsWith('http')) {
           // Generate proper API URL based on entity type
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003';
+          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
           const entityEndpoints = {
             vehicles: '/api/vehicles/files/',
             vendors: '/api/vendors/files/',

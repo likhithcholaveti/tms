@@ -405,8 +405,8 @@ const CustomerForm = () => {
     // Check if it's already a full URL
     if (imagePath.startsWith('http')) return imagePath;
 
-    // Create URL for server-stored image - use backend port 3003
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3003';
+    // Create URL for server-stored image - use backend port 3004
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
 
     // Extract just the filename from the path
     let filename = imagePath;
@@ -1104,7 +1104,11 @@ const CustomerForm = () => {
                         {renderFormField('Cogent Notice Period (in Days)', 'CogentNoticePeriod', 'number', { placeholder: 'e.g., 30' })}
                         {renderFormField('Credit Period (in Days)', 'CreditPeriod', 'number', { placeholder: 'e.g., 45' })}
                         {renderFormField('Customer Insurance', 'Insurance', 'radio', { values: ['Yes', 'No'] })}
-                        {renderFormField('Minimum Insurance value (in Rs)', 'MinimumInsuranceValue', 'number', { placeholder: 'Enter amount' })}
+                        {renderFormField('Minimum Insurance value (in Rs)', 'MinimumInsuranceValue', 'number', { placeholder: 'Enter amount', onKeyDown: (e) => {
+                          if (e.key === 'e' || e.key === 'E') {
+                            e.preventDefault();
+                          }
+                        } })}
                         {renderFormField('Cogent Debit Clause', 'CogentDebitClause', 'radio', { values: ['Yes', 'No'] })}
                         {renderFormField('Cogent Debit Limit', 'CogentDebitLimit', 'number', { placeholder: 'Enter limit' })}
                         {renderFormField('BG (Bank Guarantee)', 'BG', 'radio', { values: ['Yes', 'No'] })}

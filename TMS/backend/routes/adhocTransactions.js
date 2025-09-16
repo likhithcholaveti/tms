@@ -129,130 +129,189 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/adhoc-transactions - Create new adhoc transaction
-router.post('/', async (req, res) => {
-  try {
-    const {
-      TripType,
-      TransactionDate,
-      TripNo,
-      CustomerID,
-      ProjectID,
-      VehicleNumber,
-      VehicleType,
-      VendorName,
-      VendorNumber,
-      DriverName,
-      DriverNumber,
-      DriverAadharNumber,
-      DriverLicenceNumber,
-      DriverAadharDoc,
-      DriverLicenceDoc,
-      TollExpensesDoc,
-      ParkingChargesDoc,
-      ArrivalTimeAtHub,
-      InTimeByCust,
-      OutTimeFromHub,
-      ReturnReportingTime,
-      OutTimeFrom,
-      OpeningKM,
-      ClosingKM,
-      TotalShipmentsForDeliveries,
-      TotalShipmentDeliveriesAttempted,
-      TotalShipmentDeliveriesDone,
-      VFreightFix,
-      FixKm,
-      VFreightVariable,
-      TotalFreight,
-      TollExpenses,
-      ParkingCharges,
-      LoadingCharges,
-      UnloadingCharges,
-      OtherCharges,
-      OtherChargesRemarks,
-      TotalDutyHours,
-      AdvanceRequestNo,
-      AdvanceToPaid,
-      AdvanceApprovedAmount,
-      AdvanceApprovedBy,
-      AdvancePaidAmount,
-      AdvancePaidMode,
-      AdvancePaidDate,
-      AdvancePaidBy,
-      EmployeeDetailsAdvance,
-      BalanceToBePaid,
-      BalancePaidAmount,
-      Variance,
-      BalancePaidDate,
-      BalancePaidBy,
-      EmployeeDetailsBalance,
-      Revenue,
-      Margin,
-      MarginPercentage,
-      Status = 'Pending',
-      TripClose = false,
-      Remarks
-    } = req.body;
+  // Helper function to validate time in HH:MM format (4 digits mandatory)
+  const isValidTime = (time) => {
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    return timeRegex.test(time);
+  };
 
-    // Validate required fields
-    if (!TripType || !TransactionDate || !TripNo || !VehicleNumber || !VendorName || !DriverName || !DriverNumber || !OpeningKM || !ClosingKM) {
-      return res.status(400).json({
-        success: false,
-        error: 'Required fields: TripType, TransactionDate, TripNo, VehicleNumber, VendorName, DriverName, DriverNumber, OpeningKM, ClosingKM'
-      });
+  // Helper function to calculate duty hours considering after midnight scenario
+  const calculateDutyHours = (arrival, returnTime) => {
+    const [arrivalHour, arrivalMinute] = arrival.split(':').map(Number);
+    const [returnHour, returnMinute] = returnTime.split(':').map(Number);
+
+    let arrivalDate = new Date();
+    arrivalDate.setHours(arrivalHour, arrivalMinute, 0, 0);
+
+    let returnDate = new Date();
+    returnDate.setHours(returnHour, returnMinute, 0, 0);
+
+    if (returnDate <= arrivalDate) {
+      // Return time is after midnight
+      returnDate.setDate(returnDate.getDate() + 1);
     }
 
-    const query = `
-      INSERT INTO adhoc_transactions (
+    const diffMs = returnDate - arrivalDate;
+    const hours = diffMs / (1000 * 60 * 60);
+    return hours;
+  };
+
+  // POST /api/adhoc-transactions - Create new adhoc transaction
+  router.post('/', async (req, res) => {
+    try {
+      const {
+        TripType,
+        TransactionDate,
+        TripNo,
+        CustomerID,
+        ProjectID,
+        VehicleNumber,
+        FixedVehicleNumber, // New field
+        VehicleType,
+        VendorName,
+        VendorCode, // New field
+        VendorNumber,
+        DriverName,
+        DriverNumber,
+        DriverAadharNumber,
+        DriverLicenceNumber,
+        DriverAadharDoc,
+        DriverLicenceDoc,
+        TollExpensesDoc,
+        ParkingChargesDoc,
+        ArrivalTimeAtHub,
+        InTimeByCust,
+        OutTimeFromHub,
+        ReturnReportingTime,
+        OutTimeFrom,
+        OpeningKM,
+        ClosingKM,
+        TotalShipmentsForDeliveries,
+        TotalShipmentDeliveriesAttempted,
+        TotalShipmentDeliveriesDone,
+        VFreightFix,
+        FixKm,
+        VFreightVariable,
+        TotalFreight,
+        TollExpenses,
+        ParkingCharges,
+        LoadingCharges,
+        UnloadingCharges,
+        OtherCharges,
+        OtherChargesRemarks,
+        TotalDutyHours,
+        OvertimeCostPerHour, // New field
+        CompanyName, // New field
+        AdvanceRequestNo,
+        AdvanceToPaid,
+        AdvanceApprovedAmount,
+        AdvanceApprovedBy,
+        AdvancePaidAmount,
+        AdvancePaidMode,
+        AdvancePaidDate,
+        AdvancePaidBy,
+        EmployeeDetailsAdvance,
+        BalanceToBePaid,
+        BalancePaidAmount,
+        Variance,
+        BalancePaidDate,
+        BalancePaidBy,
+        EmployeeDetailsBalance,
+        Revenue,
+        Margin,
+        MarginPercentage,
+        Status = 'Pending',
+        TripClose = false,
+        Remarks
+      } = req.body;
+
+      // Validate required fields
+      if (!TripType || !TransactionDate || !TripNo || !VehicleNumber || !VendorName || !DriverName || !DriverNumber || !OpeningKM || !ClosingKM) {
+        return res.status(400).json({
+          success: false,
+          error: 'Required fields: TripType, TransactionDate, TripNo, VehicleNumber, VendorName, DriverName, DriverNumber, OpeningKM, ClosingKM'
+        });
+      }
+
+      // Validate 4-digit time format for time fields if provided
+      const timeFields = { ArrivalTimeAtHub, OutTimeFromHub, ReturnReportingTime };
+      for (const [field, value] of Object.entries(timeFields)) {
+        if (value && !isValidTime(value)) {
+          return res.status(400).json({ success: false, error: `Invalid ${field} format. Use HH:MM.` });
+        }
+      }
+
+      // Validate return reporting time is not prior to arrival time
+      if (ArrivalTimeAtHub && ReturnReportingTime) {
+        const dutyHours = calculateDutyHours(ArrivalTimeAtHub, ReturnReportingTime);
+        if (dutyHours >= 24) {
+          return res.status(400).json({ success: false, error: 'Return time seems incorrect, resulting in a duration of 24 hours or more.' });
+        }
+      }
+
+      // Conditional validation for FixedVehicleNumber: allow only if TripType is 'Replacement'
+      if (FixedVehicleNumber && TripType !== 'Replacement') {
+        return res.status(400).json({ success: false, error: 'FixedVehicleNumber entry is allowed only for replacement vehicles.' });
+      }
+
+      // Calculate TotalDutyHours if ArrivalTimeAtHub and ReturnReportingTime are provided
+      let calculatedDutyHours = null;
+      if (ArrivalTimeAtHub && ReturnReportingTime) {
+        calculatedDutyHours = calculateDutyHours(ArrivalTimeAtHub, ReturnReportingTime);
+      }
+
+      const query = `
+        INSERT INTO adhoc_transactions (
+          TripType, TransactionDate, TripNo, CustomerID, ProjectID,
+          VehicleNumber, FixedVehicleNumber, VehicleType, VendorName, VendorCode, VendorNumber,
+          DriverName, DriverNumber, DriverAadharNumber, DriverLicenceNumber,
+          DriverAadharDoc, DriverLicenceDoc, TollExpensesDoc, ParkingChargesDoc,
+          ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime, OutTimeFrom,
+          OpeningKM, ClosingKM, TotalShipmentsForDeliveries, TotalShipmentDeliveriesAttempted, TotalShipmentDeliveriesDone,
+          VFreightFix, FixKm, VFreightVariable, TotalFreight,
+          TollExpenses, ParkingCharges, LoadingCharges, UnloadingCharges, OtherCharges, OtherChargesRemarks,
+          TotalDutyHours, OvertimeCostPerHour, CompanyName, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
+          AdvancePaidAmount, AdvancePaidMode, AdvancePaidDate, AdvancePaidBy, EmployeeDetailsAdvance,
+          BalanceToBePaid, BalancePaidAmount, Variance, BalancePaidDate, BalancePaidBy, EmployeeDetailsBalance,
+          Revenue, Margin, MarginPercentage, Status, TripClose, Remarks
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
         TripType, TransactionDate, TripNo, CustomerID, ProjectID,
-        VehicleNumber, VehicleType, VendorName, VendorNumber,
+        VehicleNumber, FixedVehicleNumber, VehicleType, VendorName, VendorCode, VendorNumber,
         DriverName, DriverNumber, DriverAadharNumber, DriverLicenceNumber,
         DriverAadharDoc, DriverLicenceDoc, TollExpensesDoc, ParkingChargesDoc,
         ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime, OutTimeFrom,
         OpeningKM, ClosingKM, TotalShipmentsForDeliveries, TotalShipmentDeliveriesAttempted, TotalShipmentDeliveriesDone,
         VFreightFix, FixKm, VFreightVariable, TotalFreight,
         TollExpenses, ParkingCharges, LoadingCharges, UnloadingCharges, OtherCharges, OtherChargesRemarks,
-        TotalDutyHours, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
+        calculatedDutyHours, OvertimeCostPerHour, CompanyName, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
         AdvancePaidAmount, AdvancePaidMode, AdvancePaidDate, AdvancePaidBy, EmployeeDetailsAdvance,
         BalanceToBePaid, BalancePaidAmount, Variance, BalancePaidDate, BalancePaidBy, EmployeeDetailsBalance,
         Revenue, Margin, MarginPercentage, Status, TripClose, Remarks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+      ];
 
-    const values = [
-      TripType, TransactionDate, TripNo, CustomerID, ProjectID,
-      VehicleNumber, VehicleType, VendorName, VendorNumber,
-      DriverName, DriverNumber, DriverAadharNumber, DriverLicenceNumber,
-      DriverAadharDoc, DriverLicenceDoc, TollExpensesDoc, ParkingChargesDoc,
-      ArrivalTimeAtHub, InTimeByCust, OutTimeFromHub, ReturnReportingTime, OutTimeFrom,
-      OpeningKM, ClosingKM, TotalShipmentsForDeliveries, TotalShipmentDeliveriesAttempted, TotalShipmentDeliveriesDone,
-      VFreightFix, FixKm, VFreightVariable, TotalFreight,
-      TollExpenses, ParkingCharges, LoadingCharges, UnloadingCharges, OtherCharges, OtherChargesRemarks,
-      TotalDutyHours, AdvanceRequestNo, AdvanceToPaid, AdvanceApprovedAmount, AdvanceApprovedBy,
-      AdvancePaidAmount, AdvancePaidMode, AdvancePaidDate, AdvancePaidBy, EmployeeDetailsAdvance,
-      BalanceToBePaid, BalancePaidAmount, Variance, BalancePaidDate, BalancePaidBy, EmployeeDetailsBalance,
-      Revenue, Margin, MarginPercentage, Status, TripClose, Remarks
-    ];
+      const [result] = await pool.query(query, values);
 
-    const [result] = await pool.query(query, values);
-
-    res.status(201).json({
-      success: true,
-      message: 'Adhoc transaction created successfully',
-      data: {
-        TransactionID: result.insertId,
-        ...req.body
-      }
-    });
-  } catch (error) {
-    console.error('Error creating adhoc transaction:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create adhoc transaction',
-      details: error.message
-    });
-  }
-});
+      res.status(201).json({
+        success: true,
+        message: 'Adhoc transaction created successfully',
+        data: {
+          TransactionID: result.insertId,
+          ...req.body,
+          TotalDutyHours: calculatedDutyHours
+        }
+      });
+    } catch (error) {
+      console.error('Error creating adhoc transaction:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create adhoc transaction',
+        details: error.message
+      });
+    }
+  });
 
 // PUT /api/adhoc-transactions/:id - Update adhoc transaction
 router.put('/:id', async (req, res) => {
