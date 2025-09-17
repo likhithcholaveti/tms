@@ -22,6 +22,12 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
+    console.log('🔍 API RESPONSE DEBUG - Success:', {
+      url: response.config.url,
+      method: response.config.method,
+      status: response.status,
+      data: response.data
+    });
     return response;
   },
   (error) => {
@@ -59,8 +65,24 @@ export const dashboardAPI = {
 export const customerAPI = {
   getAll: () => api.get('/customers'),
   getById: (id) => api.get(`/customers/${id}`),
-  create: (data) => api.post('/customers', data),
-  update: (id, data) => api.put(`/customers/${id}`, data),
+  create: (data) => {
+    // Handle FormData for file uploads
+    if (data instanceof FormData) {
+      return api.post('/customers', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('/customers', data);
+  },
+  update: (id, data) => {
+    // Handle FormData for file uploads
+    if (data instanceof FormData) {
+      return api.put(`/customers/${id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.put(`/customers/${id}`, data);
+  },
   delete: (id) => api.delete(`/customers/${id}`),
   deleteFile: (id, fieldName) => api.delete(`/customers/${id}/files/${fieldName}`),
 };

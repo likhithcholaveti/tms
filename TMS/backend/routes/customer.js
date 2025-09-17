@@ -155,6 +155,31 @@ module.exports = (pool) => {
     }
   });
 
+  // Helper function to generate customer code abbreviation
+  const generateCustomerAbbreviation = (name, maxLength = 3) => {
+    if (!name || name.trim() === '') return 'CUS';
+
+    // Remove common words and get meaningful parts
+    const cleanName = name
+      .replace(/\b(Ltd|Limited|Pvt|Private|Company|Corp|Corporation|Inc|Incorporated|LLC|LLP)\b/gi, '')
+      .replace(/\b(The|And|Of|For|In|On|At|By|With)\b/gi, '')
+      .trim();
+
+    // Split into words and take first letters
+    const words = cleanName.split(/\s+/).filter(word => word.length > 0);
+
+    if (words.length === 1) {
+      // Single word - take first few characters
+      return words[0].substring(0, maxLength).toUpperCase();
+    } else if (words.length <= maxLength) {
+      // Multiple words - take first letter of each
+      return words.map(word => word.charAt(0)).join('').toUpperCase();
+    } else {
+      // Too many words - take first letter of first few words
+      return words.slice(0, maxLength).map(word => word.charAt(0)).join('').toUpperCase();
+    }
+  };
+
   // Create a new customer
   // This route creates a new customer record in the database using the data provided in the request body.
   // It responds with a 201 status code and the newly created customer's data, including the generated ID.
@@ -175,26 +200,30 @@ module.exports = (pool) => {
     if (dateErrors.length > 0) {
       return res.status(400).json({ errors: dateErrors });
     }
-    
+
     try {
       // Generate CustomerCode automatically if not provided
       let customerCode = customer.CustomerCode;
       if (!customerCode || customerCode.trim() === '') {
-        const customerName = customer.Name || '';
-        const namePrefix = customerName.substring(0, 3).toUpperCase();
+        const customerName = customer.Name || customer.MasterCustomerName || '';
+        const namePrefix = generateCustomerAbbreviation(customerName, 3);
         let nextNumber = 1;
 
         // Find the highest existing customer code number with the same prefix
+        const prefixLength = namePrefix.length;
         const [maxCodeResult] = await pool.query(`
           SELECT CustomerCode FROM Customer
-          WHERE CustomerCode REGEXP '^${namePrefix}[0-9]+$' 
-          ORDER BY CAST(SUBSTRING(CustomerCode, 4) AS UNSIGNED) DESC
+          WHERE CustomerCode LIKE '${namePrefix}%'
+          AND LENGTH(CustomerCode) > ${prefixLength}
+          AND SUBSTRING(CustomerCode, ${prefixLength + 1}) REGEXP '^[0-9]+$'
+          ORDER BY CAST(SUBSTRING(CustomerCode, ${prefixLength + 1}) AS UNSIGNED) DESC
           LIMIT 1
         `);
 
         if (maxCodeResult.length > 0) {
           const maxCode = maxCodeResult[0].CustomerCode;
-          const currentNumber = parseInt(maxCode.substring(3));
+          const numberPart = maxCode.substring(prefixLength);
+          const currentNumber = parseInt(numberPart) || 0;
           nextNumber = currentNumber + 1;
         }
 
@@ -207,13 +236,21 @@ module.exports = (pool) => {
         );
 
         // If somehow it still exists, keep incrementing until we find a free one
-        while (existingCheck.length > 0) {
+        let attempts = 0;
+        while (existingCheck.length > 0 && attempts < 100) {
           nextNumber++;
           customerCode = `${namePrefix}${String(nextNumber).padStart(3, '0')}`;
           [existingCheck] = await pool.query(
             'SELECT CustomerID FROM Customer WHERE CustomerCode = ?',
             [customerCode]
           );
+          attempts++;
+        }
+
+        // Fallback if we can't find a unique code
+        if (existingCheck.length > 0) {
+          const timestamp = Date.now().toString().slice(-6);
+          customerCode = `${namePrefix}${timestamp}`;
         }
       }
 
@@ -307,12 +344,22 @@ module.exports = (pool) => {
         await Promise.all(insertPromises);
       }
 
-      res.status(201).json({
+      console.log('🔍 BACKEND DEBUG - Customer creation response:', {
+        CustomerID: customerId,
+        CustomerCode: customerCode,
+        customerData: customer,
+        filePaths: filePaths
+      });
+
+      const responseData = {
         CustomerID: customerId,
         CustomerCode: customerCode,
         ...customer,
         ...filePaths
-      });
+      };
+
+      console.log('🔍 BACKEND DEBUG - Final response data:', responseData);
+      res.status(201).json(responseData);
     } catch (error) {
       console.error('Error creating customer:', error);
       res.status(500).json({ error: 'Internal server error' });
