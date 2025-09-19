@@ -26,23 +26,12 @@ const DocumentUpload = ({
         // If value is a URL/path from database
         let fileUrl = value;
         if (!value.startsWith('http')) {
-          // Generate proper API URL based on entity type
-          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3004';
-          const entityEndpoints = {
-            vehicles: '/api/vehicles/files/',
-            vendors: '/api/vendors/files/',
-            drivers: '/api/drivers/files/',
-            customers: '/api/customers/files/',
-            transactions: '/api/daily-vehicle-transactions/files/'
-          };
-          const endpoint = entityEndpoints[entityType] || '/api/daily-vehicle-transactions/files/';
-
-          // Extract filename from path
-          const filename = value.includes('/') || value.includes('\\')
-            ? value.split(/[/\\]/).pop()
-            : value;
-
-          fileUrl = `${apiBaseUrl}${endpoint}${filename}`;
+          const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3005';
+          // The `value` prop should contain the relative path to the file, including the entity folder.
+          // e.g., 'customers/some-file.pdf'
+          // We construct the full URL by combining the base URL, the '/uploads' path, and the file path.
+          const filePath = value.replace(/\\/g, '/'); // Normalize path separators
+          fileUrl = `${apiBaseUrl}/uploads/${filePath}`;
         }
 
         setPreview(fileUrl);

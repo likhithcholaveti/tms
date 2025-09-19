@@ -28,8 +28,7 @@ const BillingForm = () => {
     DueDate: '',
     CustomerID: '',
     ProjectID: '',
-    BillingPeriodStart: '',
-    BillingPeriodEnd: '',
+    BillingTenure: '',
     TotalTransactions: 0,
     TotalAmount: '',
     GSTRate: 18.00,
@@ -156,8 +155,7 @@ const BillingForm = () => {
         DueDate: billingData.DueDate,
         CustomerID: billingData.CustomerID || null,
         ProjectID: billingData.ProjectID || null,
-        BillingPeriodStart: billingData.BillingPeriodStart,
-        BillingPeriodEnd: billingData.BillingPeriodEnd,
+        BillingTenure: billingData.BillingTenure,
         TotalTransactions: billingData.TotalTransactions || 0,
         TotalAmount: parseFloat(billingData.TotalAmount) || 0,
         GSTRate: billingData.GSTRate || 18.00,
@@ -261,8 +259,7 @@ const BillingForm = () => {
       DueDate: '',
       CustomerID: '',
       ProjectID: '',
-      BillingPeriodStart: '',
-      BillingPeriodEnd: '',
+      BillingTenure: '',
       TotalTransactions: 0,
       TotalAmount: '',
       GSTRate: 18.00,
@@ -414,32 +411,17 @@ const BillingForm = () => {
           </FormField>
 
           {/* Billing Period */}
-          <FormField label="Billing Period" fullWidth>
-            <div className="form-grid">
-              <FormField label="Period Start" required error={errors.BillingPeriodStart}>
-                <FormInput
-                  type="date"
-                  name="BillingPeriodStart"
-                  value={billingData.BillingPeriodStart}
-                  onChange={handleBillingInputChange}
-                  required
-                  error={!!errors.BillingPeriodStart}
-                  icon="📅"
-                />
-              </FormField>
-
-              <FormField label="Period End" required error={errors.BillingPeriodEnd}>
-                <FormInput
-                  type="date"
-                  name="BillingPeriodEnd"
-                  value={billingData.BillingPeriodEnd}
-                  onChange={handleBillingInputChange}
-                  required
-                  error={!!errors.BillingPeriodEnd}
-                  icon="📅"
-                />
-              </FormField>
-            </div>
+          <FormField label="Billing Tenure" fullWidth>
+            <FormInput
+              type="text"
+              name="BillingTenure"
+              value={billingData.BillingTenure}
+              onChange={handleBillingInputChange}
+              placeholder="e.g. 25th to 24th or 1st to 31st"
+              required
+              error={!!errors.BillingTenure}
+              icon="📅"
+            />
           </FormField>
 
           {/* Amount Details */}
@@ -646,7 +628,11 @@ const BillingForm = () => {
                   { key: 'InvoiceNo', label: 'Invoice No' },
                   { key: 'CustomerID', label: 'Customer ID' },
                   { key: 'InvoiceDate', label: 'Invoice Date' },
+                  { key: 'BillingTenure', label: 'Billing Tenure' },
                   { key: 'DueDate', label: 'Due Date' },
+                  { key: 'TotalAmount', label: 'Total Amount' },
+                  { key: 'GSTRate', label: 'GST Rate (%)' },
+                  { key: 'GSTAmount', label: 'GST Amount' },
                   { key: 'GrandTotal', label: 'Grand Total' },
                   { key: 'PaymentStatus', label: 'Status' }
                 ]}

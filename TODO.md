@@ -1,22 +1,26 @@
-# TODO: Fix Customer Code Generation and Site Linking
+# TODO List for TMS Fixes
 
-## Current Issues
-- Customer code is not displaying in the UI after adding a new customer
-- Customer site needs to be linked to location
-- Ensure customer code and service code follow terminology and suggestions
+## 1. Fix Location Dropdown in Project Details
+- [x] Add debugging logs to ProjectForm.jsx to verify customer change and location loading
+- [x] Clear locations in resetForm to prevent stale data
+- [x] Fixed potential stale location data issue
 
-## Tasks
-- [x] Review CustomerForm.jsx submitCustomerData function and state update logic
-- [x] Fix CustomerCode field display after successful customer creation
-- [x] Verify customer site linkage to location in form and backend
-- [x] Ensure customer code and service code terminology consistency
-- [x] Test end-to-end add customer functionality
-- [x] Verify generated CustomerCode appears in UI after save
+## 2. Fix Login with Different Accounts
+- [x] Identified issue: Login.jsx redirects if already authenticated, preventing account switching
+- [x] Add logout functionality or modify login flow to allow account switching
+- [ ] Test login with different accounts
 
-## Status
-- Backend code generation logic confirmed working
-- Frontend state update logic fixed - now lets backend generate code
-- Customer site location linking implemented - customer sites now validated against customer locations
-- Customer and service code terminology verified - follows proper naming conventions
-- End-to-end testing completed via code review - all changes implemented correctly
-- CustomerCode generation and display verified in code logic
+## 3. Add GST Rate Column to Billing Records Table
+- [x] Added TotalAmount, GSTRate, and GSTAmount columns to the DataTable in BillingForm.jsx
+- [x] GST Rate and GST Amount now display in the billing records table
+
+## 4. Replace Billing Period Dates with Billing Tenure
+- [x] Updated database schema to replace BillingPeriodStart/BillingPeriodEnd with BillingTenure
+- [x] Modified backend billing routes to handle BillingTenure field
+- [x] Updated frontend form to use single text field for billing tenure
+- [x] Updated data table to display BillingTenure column
+- [x] Created database migration script for existing installations
+
+## General
+- [ ] Test both fixes after implementation
+- [ ] Verify no regressions in other functionality

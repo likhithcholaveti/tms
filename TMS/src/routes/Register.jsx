@@ -78,7 +78,7 @@ const Register = () => {
       });
 
       if (result.success) {
-        setSuccess('Registration successful! Redirecting to login...');
+        setSuccess('Registration successful! Logging you in...');
         // Reset form
         setFormData({
           username: '',
@@ -88,10 +88,31 @@ const Register = () => {
           confirmPassword: ''
         });
 
-        // Redirect to login after 2 seconds
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
+        // Automatically login the user after successful registration
+        try {
+          const loginResult = await authService.login({
+            email: formData.email,
+            password: formData.password
+          });
+
+          if (loginResult.success) {
+            // Redirect based on user role after successful auto-login
+            setTimeout(() => {
+              authService.redirectByRole();
+            }, 1000);
+          } else {
+            // If auto-login fails, redirect to login page
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 2000);
+          }
+        } catch (loginError) {
+          console.error('Auto-login error:', loginError);
+          // Redirect to login page if auto-login fails
+          setTimeout(() => {
+            window.location.href = '/login';
+          }, 2000);
+        }
       } else {
         setError(result.error);
       }

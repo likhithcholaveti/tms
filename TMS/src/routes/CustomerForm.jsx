@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { customerAPI, apiHelpers } from '../services/api';
+import { customerAPI, locationAPI, apiHelpers } from '../services/api';
 import DataTable from '../components/DataTable';
 import ExportButton from '../components/ExportButton';
 import AddressForm from '../components/AddressForm';
@@ -8,6 +8,7 @@ import DocumentUpload from '../components/DocumentUpload';
 import ValidationErrorModal from '../components/ValidationErrorModal';
 import { showWarning } from '../components/Notification';
 import useFormValidation from '../hooks/useFormValidation';
+import Dropdown from '../components/Dropdown';
 import './CustomerForm.css';
 
 // Utility function to format date for input fields
@@ -75,8 +76,7 @@ const CustomerForm = () => {
     CustomerCode: '', // Auto-generated, read-only
     TypeOfServices: 'Transportation',
     ServiceCode: '', // Auto-selected based on TypeOfServices
-    Locations: [{ location: '' }], // Multiple locations
-    CustomerSite: [{ site: '' }], // Multiple customer sites
+    CustomerSite: [{ LocationID: '', site: '' }], // Multiple customer sites
 
     // Agreement & Terms Section
     Agreement: 'No',
@@ -159,6 +159,7 @@ const CustomerForm = () => {
 
   const [customerData, setCustomerData] = useState(getInitialState());
   const [customers, setCustomers] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
@@ -184,37 +185,11 @@ const CustomerForm = () => {
 
   
 
-  // Handle adding new location
-  const addLocation = () => {
-    setCustomerData(prev => ({
-      ...prev,
-      Locations: [...prev.Locations, { location: '' }]
-    }));
-  };
-
-  // Handle removing location
-  const removeLocation = (index) => {
-    setCustomerData(prev => ({
-      ...prev,
-      Locations: prev.Locations.filter((_, i) => i !== index)
-    }));
-  };
-
-  // Handle location change
-  const handleLocationChange = (index, value) => {
-    setCustomerData(prev => ({
-      ...prev,
-      Locations: prev.Locations.map((item, i) =>
-        i === index ? { location: value } : item
-      )
-    }));
-  };
-
   // Handle adding new customer site
   const addCustomerSite = () => {
     setCustomerData(prev => ({
       ...prev,
-      CustomerSite: [...prev.CustomerSite, { site: '' }]
+      CustomerSite: [...prev.CustomerSite, { LocationID: '', site: '' }]
     }));
   };
 
@@ -227,28 +202,11 @@ const CustomerForm = () => {
   };
 
   // Handle customer site change with validation against locations
-  const handleCustomerSiteChange = (index, value) => {
-    // Get current locations
-    const currentLocations = customerData.Locations
-      .map(loc => loc.location.trim())
-      .filter(loc => loc !== '');
-
-    // If there are locations defined, validate that customer site matches one of them
-    if (currentLocations.length > 0 && value.trim() !== '') {
-      const matchingLocation = currentLocations.find(loc =>
-        loc.toLowerCase() === value.trim().toLowerCase()
-      );
-
-      if (!matchingLocation) {
-        // Show warning but still allow the input
-        showWarning(`Customer site "${value}" should correspond to one of the defined locations: ${currentLocations.join(', ')}`);
-      }
-    }
-
+  const handleCustomerSiteChange = (index, name, value) => {
     setCustomerData(prev => ({
       ...prev,
       CustomerSite: prev.CustomerSite.map((item, i) =>
-        i === index ? { site: value } : item
+        i === index ? { ...item, [name]: value } : item
       )
     }));
   };
@@ -270,6 +228,7 @@ const CustomerForm = () => {
   // Load customers on component mount
   useEffect(() => {
     loadCustomers();
+    loadLocations();
   }, []);
 
   // Expiry date reminder logic with red flag popups
@@ -361,6 +320,20 @@ const CustomerForm = () => {
       console.error('Error loading customers:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadLocations = async (customerId) => {
+    try {
+      if (customerId) {
+        const response = await locationAPI.getByCustomer(customerId);
+        setLocations(response.data.data || []);
+      } else {
+        const response = await locationAPI.getAll();
+        setLocations(response.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading locations:', error);
     }
   };
 
@@ -967,10 +940,19 @@ const CustomerForm = () => {
         <div className="multiple-inputs-container">
           {customerData.CustomerSite.map((site, index) => (
             <div key={index} className="multiple-input-row">
+              <Dropdown
+                name="LocationID"
+                value={site.LocationID}
+                onChange={(e) => handleCustomerSiteChange(index, 'LocationID', e.target.value)}
+                options={locations}
+                valueKey="LocationID"
+                labelKey="LocationName"
+                placeholder="Select a location"
+              />
               <input
                 type="text"
                 value={site.site}
-                onChange={(e) => handleCustomerSiteChange(index, e.target.value)}
+                onChange={(e) => handleCustomerSiteChange(index, 'site', e.target.value)}
                 placeholder={`Enter site`}
                 className="multiple-input"
               />
@@ -1165,7 +1147,6 @@ const CustomerForm = () => {
                         {renderFormField('Customer Code', 'CustomerCode', 'text', { placeholder: 'Auto-generated', readOnly: true })}
                         {renderFormField('Type of Services', 'TypeOfServices', 'select', { values: ['Transportation', 'Warehousing', 'Both', 'Logistics', 'Industrial Transport', 'Retail Distribution', 'Other'] }, true)}
                         {renderFormField('Service Code', 'ServiceCode', 'text', { placeholder: 'Auto-selected', readOnly: true })}
-                        {renderMultipleLocations()}
                         {renderMultipleCustomerSites()}
                     </div>
                 </div>

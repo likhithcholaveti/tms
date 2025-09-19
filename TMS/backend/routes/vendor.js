@@ -104,6 +104,140 @@ module.exports = (pool) => {
     return vendor;
   };
 
+  // Search vendors by multiple criteria
+  // This route allows searching vendors by various fields with flexible matching
+  router.get('/search', async (req, res) => {
+    try {
+      const {
+        vendor_name,
+        vendor_mobile_no,
+        vendor_code,
+        vendor_address,
+        vendor_company_name,
+        vendor_company_gst,
+        type_of_company,
+        project_id,
+        customer_id,
+        status,
+        limit = 50,
+        offset = 0
+      } = req.query;
+
+      // Build dynamic WHERE clause
+      const whereConditions = [];
+      const queryParams = [];
+
+      if (vendor_name) {
+        whereConditions.push('v.VendorName LIKE ?');
+        queryParams.push(`%${vendor_name}%`);
+      }
+
+      if (vendor_mobile_no) {
+        whereConditions.push('v.VendorMobileNo LIKE ?');
+        queryParams.push(`%${vendor_mobile_no}%`);
+      }
+
+      if (vendor_code) {
+        whereConditions.push('v.VendorCode LIKE ?');
+        queryParams.push(`%${vendor_code}%`);
+      }
+
+      if (vendor_address) {
+        whereConditions.push('(v.VendorAddress LIKE ? OR v.HouseFlatNo LIKE ? OR v.StreetLocality LIKE ? OR v.City LIKE ? OR v.State LIKE ?)');
+        const addressParam = `%${vendor_address}%`;
+        queryParams.push(addressParam, addressParam, addressParam, addressParam, addressParam);
+      }
+
+      if (vendor_company_name) {
+        whereConditions.push('v.CompanyName LIKE ?');
+        queryParams.push(`%${vendor_company_name}%`);
+      }
+
+      if (vendor_company_gst) {
+        whereConditions.push('v.CompanyGST LIKE ?');
+        queryParams.push(`%${vendor_company_gst}%`);
+      }
+
+      if (type_of_company) {
+        whereConditions.push('v.TypeOfCompany = ?');
+        queryParams.push(type_of_company);
+      }
+
+      if (project_id) {
+        whereConditions.push('v.project_id = ?');
+        queryParams.push(project_id);
+      }
+
+      if (customer_id) {
+        whereConditions.push('v.customer_id = ?');
+        queryParams.push(customer_id);
+      }
+
+      if (status) {
+        whereConditions.push('v.Status = ?');
+        queryParams.push(status);
+      }
+
+      // Build the query
+      let query = `
+        SELECT v.*, p.ProjectName as project_name, p.ProjectCode as project_code, c.Name as customer_name
+        FROM vendor v
+        LEFT JOIN Project p ON v.project_id = p.ProjectID
+        LEFT JOIN Customer c ON v.customer_id = c.CustomerID
+      `;
+
+      if (whereConditions.length > 0) {
+        query += ' WHERE ' + whereConditions.join(' AND ');
+      }
+
+      query += ' ORDER BY v.VendorID DESC LIMIT ? OFFSET ?';
+      queryParams.push(parseInt(limit), parseInt(offset));
+
+      const [rows] = await pool.query(query, queryParams);
+
+      // Add file URLs to each vendor
+      const vendorsWithFileUrls = rows.map(vendor => addFileUrls(vendor));
+
+      // Get total count for pagination
+      let countQuery = 'SELECT COUNT(*) as total FROM vendor v';
+      if (whereConditions.length > 0) {
+        countQuery += ' WHERE ' + whereConditions.join(' AND ');
+      }
+
+      const [countResult] = await pool.query(countQuery, queryParams.slice(0, -2)); // Remove limit and offset
+      const totalCount = countResult[0].total;
+
+      res.json({
+        success: true,
+        data: vendorsWithFileUrls,
+        pagination: {
+          total: totalCount,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: (parseInt(offset) + parseInt(limit)) < totalCount
+        },
+        searchCriteria: {
+          vendor_name,
+          vendor_mobile_no,
+          vendor_code,
+          vendor_address,
+          vendor_company_name,
+          vendor_company_gst,
+          type_of_company,
+          project_id,
+          customer_id,
+          status
+        }
+      });
+    } catch (error) {
+      console.error('Error searching vendors:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        details: error.message
+      });
+    }
+  });
+
   // Get all vendors with complete information
   // This route retrieves all vendor records using the comprehensive vendor table
   router.get('/', async (req, res) => {

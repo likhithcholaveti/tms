@@ -1,4 +1,4 @@
-const express = require('express');
+ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -91,25 +91,25 @@ module.exports = (pool) => {
     if (customer.AgreementFile) {
       // Extract just the filename from the stored path
       const filename = customer.AgreementFile.includes('/') || customer.AgreementFile.includes('\\')
-        ? customer.AgreementFile.split(/[\\/]/).pop()
+        ? customer.AgreementFile.split(/[\/\\]/).pop()
         : customer.AgreementFile;
       customer.AgreementFileUrl = baseUrl + filename;
     }
     if (customer.BGFile) {
       const filename = customer.BGFile.includes('/') || customer.BGFile.includes('\\')
-        ? customer.BGFile.split(/[\\/]/).pop()
+        ? customer.BGFile.split(/[\/\\]/).pop()
         : customer.BGFile;
       customer.BGFileUrl = baseUrl + filename;
     }
     if (customer.BGReceivingFile) {
       const filename = customer.BGReceivingFile.includes('/') || customer.BGReceivingFile.includes('\\')
-        ? customer.BGReceivingFile.split(/[\\/]/).pop()
+        ? customer.BGReceivingFile.split(/[\/\\]/).pop()
         : customer.BGReceivingFile;
       customer.BGReceivingFileUrl = baseUrl + filename;
     }
     if (customer.POFile) {
       const filename = customer.POFile.includes('/') || customer.POFile.includes('\\')
-        ? customer.POFile.split(/[\\/]/).pop()
+        ? customer.POFile.split(/[\/\\]/).pop()
         : customer.POFile;
       customer.POFileUrl = baseUrl + filename;
     }
@@ -145,10 +145,27 @@ module.exports = (pool) => {
         return res.status(404).json({ error: 'Customer not found' });
       }
 
+      const [sites] = await pool.query('SELECT * FROM customer_site WHERE CustomerID = ?', [id]);
+      const [officeAddresses] = await pool.query('SELECT * FROM customer_office_address WHERE CustomerID = ?', [id]);
+      const [keyContacts] = await pool.query('SELECT * FROM customer_key_contact WHERE CustomerID = ?', [id]);
+      const [cogentContacts] = await pool.query('SELECT * FROM customer_cogent_contact WHERE CustomerID = ?', [id]);
+
+      // Fetch location details for each site
+      for (const site of sites) {
+        const [locationRows] = await pool.query('SELECT * FROM Location WHERE LocationID = ?', [site.LocationID]);
+        site.LocationDetails = locationRows.length > 0 ? locationRows[0] : null;
+      }
+
       // Add file URLs to the customer data
       const customerWithFileUrls = addFileUrls(rows[0]);
 
-      res.json(customerWithFileUrls);
+      res.json({
+        ...customerWithFileUrls,
+        CustomerSites: sites,
+        CustomerOfficeAddress: officeAddresses,
+        CustomerKeyContact: keyContacts,
+        CustomerCogentContact: cogentContacts.length > 0 ? cogentContacts[0] : null
+      });
     } catch (error) {
       console.error('Error fetching customer:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -196,6 +213,19 @@ module.exports = (pool) => {
     const customer = req.body;
     const files = req.files;
 
+    if (customer.CustomerSite && typeof customer.CustomerSite === 'string') {
+      customer.CustomerSite = JSON.parse(customer.CustomerSite);
+    }
+    if (customer.CustomerOfficeAddress && typeof customer.CustomerOfficeAddress === 'string') {
+      customer.CustomerOfficeAddress = JSON.parse(customer.CustomerOfficeAddress);
+    }
+    if (customer.CustomerKeyContact && typeof customer.CustomerKeyContact === 'string') {
+      customer.CustomerKeyContact = JSON.parse(customer.CustomerKeyContact);
+    }
+    if (customer.CustomerCogentContact && typeof customer.CustomerCogentContact === 'string') {
+      customer.CustomerCogentContact = JSON.parse(customer.CustomerCogentContact);
+    }
+
     const dateErrors = validateDateSequence(customer);
     if (dateErrors.length > 0) {
       return res.status(400).json({ errors: dateErrors });
@@ -210,22 +240,23 @@ module.exports = (pool) => {
         let nextNumber = 1;
 
         // Find the highest existing customer code number with the same prefix
-        const prefixLength = namePrefix.length;
-        const [maxCodeResult] = await pool.query(`
-          SELECT CustomerCode FROM Customer
-          WHERE CustomerCode LIKE '${namePrefix}%'
-          AND LENGTH(CustomerCode) > ${prefixLength}
-          AND SUBSTRING(CustomerCode, ${prefixLength + 1}) REGEXP '^[0-9]+$'
-          ORDER BY CAST(SUBSTRING(CustomerCode, ${prefixLength + 1}) AS UNSIGNED) DESC
-          LIMIT 1
-        `);
+        const [rows] = await pool.query(
+          'SELECT CustomerCode FROM Customer WHERE CustomerCode LIKE ?',
+          [`${namePrefix}%`]
+        );
 
-        if (maxCodeResult.length > 0) {
-          const maxCode = maxCodeResult[0].CustomerCode;
-          const numberPart = maxCode.substring(prefixLength);
-          const currentNumber = parseInt(numberPart) || 0;
-          nextNumber = currentNumber + 1;
+        let maxNum = 0;
+        if (rows.length > 0) {
+          rows.forEach(row => {
+            const code = row.CustomerCode;
+            const numPart = code.substring(namePrefix.length);
+            const num = parseInt(numPart, 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          });
         }
+        nextNumber = maxNum + 1;
 
         customerCode = `${namePrefix}${String(nextNumber).padStart(3, '0')}`;
 
@@ -267,45 +298,94 @@ module.exports = (pool) => {
         if (files.PerformanceReportFile) filePaths.PerformanceReportFile = files.PerformanceReportFile[0].filename;
       }
 
-      const [results] = await pool.query(`
-        INSERT INTO Customer (
-          MasterCustomerName, Name, CustomerCode, ServiceCode, TypeOfServices, Locations, CustomerSite,
-          CustomerMobileNo, AlternateMobileNo, CustomerEmail, CustomerContactPerson, CustomerGroup, CityName,
-          HouseFlatNo, StreetLocality, CustomerCity, CustomerState, CustomerPinCode, CustomerCountry,
-          Agreement, AgreementFile, AgreementDate, AgreementTenure, AgreementExpiryDate,
-          CustomerNoticePeriod, CogentNoticePeriod, CreditPeriod, Insurance, MinimumInsuranceValue,
-          CogentDebitClause, CogentDebitLimit, BG, BGFile, BGAmount, BGDate, BGExpiryDate,
-          BGBank, BGReceivingByCustomer, BGReceivingFile, PO, POFile, PODate, POValue, POTenure,
-          POExpiryDate, Rates, RatesAnnexureFile, YearlyEscalationClause, GSTNo, GSTRate, TypeOfBilling, BillingTenure,
-          MISFormatFile, KPISLAFile, PerformanceReportFile,
-          CustomerRegisteredOfficeAddress,
-          CustomerCorporateOfficeAddress, CogentProjectHead, CogentProjectOpsManager,
-          CustomerImportantPersonAddress1, CustomerImportantPersonAddress2
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        customer.MasterCustomerName || null, customer.Name || null, customerCode || null, customer.ServiceCode || null, customer.TypeOfServices || null, customer.Locations || null, customer.CustomerSite || null,
-        customer.CustomerMobileNo || null, customer.AlternateMobileNo || null, customer.CustomerEmail || null, customer.CustomerContactPerson || null, customer.CustomerGroup || null, customer.CityName || null,
-        customer.HouseFlatNo || null, customer.StreetLocality || null, customer.CustomerCity || null, customer.CustomerState || null, customer.CustomerPinCode || null, customer.CustomerCountry || 'India',
-        customer.Agreement || null, filePaths.AgreementFile || null, customer.AgreementDate || null,
-        customer.AgreementTenure || null, customer.AgreementExpiryDate || null, customer.CustomerNoticePeriod || null,
-        customer.CogentNoticePeriod || null, customer.CreditPeriod || null, customer.Insurance || null,
-        customer.MinimumInsuranceValue || null, customer.CogentDebitClause || null,
-        customer.CogentDebitLimit || null, customer.BG || null, filePaths.BGFile || null,
-        customer.BGAmount || null, customer.BGDate || null, customer.BGExpiryDate || null,
-        customer.BGBank || null, customer.BGReceivingByCustomer || null, filePaths.BGReceivingFile || null,
-        customer.PO || null, filePaths.POFile || null, customer.PODate || null, customer.POValue || null, customer.POTenure || null,
-        customer.POExpiryDate || null, customer.Rates || null, filePaths.RatesAnnexureFile || null, customer.YearlyEscalationClause || null,
-        customer.GSTNo || null, customer.GSTRate || null, customer.TypeOfBilling || null, customer.BillingTenure || null,
-        filePaths.MISFormatFile || null, filePaths.KPISLAFile || null, filePaths.PerformanceReportFile || null,
-        customer.CustomerRegisteredOfficeAddress || null, customer.CustomerCorporateOfficeAddress || null,
-        customer.CogentProjectHead || null, customer.CogentProjectOpsManager || null,
-        customer.CustomerImportantPersonAddress1 || null, customer.CustomerImportantPersonAddress2 || null
-      ]);
+      const insertQuery = `INSERT INTO Customer (
+        \`MasterCustomerName\`, \`Name\`, \`CustomerCode\`, \`CustomerMobileNo\`, \`CustomerEmail\`, \`CustomerContactPerson\`, \`AlternateMobileNo\`, \`CustomerGroup\`, \`ServiceCode\`, \`TypeOfServices\`, \`CityName\`, \`HouseFlatNo\`, \`StreetLocality\`, \`CustomerCity\`, \`CustomerState\`, \`CustomerPinCode\`, \`CustomerCountry\`, \`TypeOfBilling\`, \`CreatedAt\`, \`UpdatedAt\`, \`Locations\`, \`Agreement\`, \`AgreementFile\`, \`AgreementDate\`, \`AgreementTenure\`, \`AgreementExpiryDate\`, \`CustomerNoticePeriod\`, \`CogentNoticePeriod\`, \`CreditPeriod\`, \`Insurance\`, \`MinimumInsuranceValue\`, \`CogentDebitClause\`, \`CogentDebitLimit\`, \`BG\`, \`BGFile\`, \`BGAmount\`, \`BGDate\`, \`BGExpiryDate\`, \`BGBank\`, \`BGReceivingByCustomer\`, \`BGReceivingFile\`, \`PO\`, \`POFile\`, \`PODate\`, \`POValue\`, \`POTenure\`, \`POExpiryDate\`, \`Rates\`, \`RatesAnnexureFile\`, \`YearlyEscalationClause\`, \`GSTNo\`, \`GSTRate\`, \`BillingTenure\`, \`MISFormatFile\`, \`KPISLAFile\`, \`PerformanceReportFile\`, \`CustomerRegisteredOfficeAddress\`, \`CustomerCorporateOfficeAddress\`, \`CogentProjectHead\`, \`CogentProjectOpsManager\`, \`CustomerImportantPersonAddress1\`, \`CustomerImportantPersonAddress2\`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const now = new Date();
+      const insertParams = [
+        customer.MasterCustomerName || null,
+        customer.Name || null,
+        customerCode || null,
+        customer.CustomerMobileNo || null,
+        customer.CustomerEmail || null,
+        customer.CustomerContactPerson || null,
+        customer.AlternateMobileNo || null,
+        customer.CustomerGroup || null,
+        customer.ServiceCode || null,
+        customer.TypeOfServices || null,
+        customer.CityName || null,
+        customer.HouseFlatNo || null,
+        customer.StreetLocality || null,
+        customer.CustomerCity || null,
+        customer.CustomerState || null,
+        customer.CustomerPinCode || null,
+        customer.CustomerCountry || null,
+        customer.TypeOfBilling || null,
+        now,
+        now,
+        customer.Locations || null,
+        customer.Agreement || null,
+        filePaths.AgreementFile || null,
+        customer.AgreementDate || null,
+        customer.AgreementTenure || null,
+        customer.AgreementExpiryDate || null,
+        customer.CustomerNoticePeriod || null,
+        customer.CogentNoticePeriod || null,
+        customer.CreditPeriod || null,
+        customer.Insurance || null,
+        customer.MinimumInsuranceValue || null,
+        customer.CogentDebitClause || null,
+        customer.CogentDebitLimit || null,
+        customer.BG || null,
+        filePaths.BGFile || null,
+        customer.BGAmount || null,
+        customer.BGDate || null,
+        customer.BGExpiryDate || null,
+        customer.BGBank || null,
+        customer.BGReceivingByCustomer || null,
+        filePaths.BGReceivingFile || null,
+        customer.PO || null,
+        filePaths.POFile || null,
+        customer.PODate || null,
+        customer.POValue || null,
+        customer.POTenure || null,
+        customer.POExpiryDate || null,
+        customer.Rates || null,
+        filePaths.RatesAnnexureFile || null,
+        customer.YearlyEscalationClause || null,
+        customer.GSTNo || null,
+        customer.GSTRate || null,
+        customer.BillingTenure || null,
+        filePaths.MISFormatFile || null,
+        filePaths.KPISLAFile || null,
+        filePaths.PerformanceReportFile || null,
+        customer.CustomerRegisteredOfficeAddress || null,
+        customer.CustomerCorporateOfficeAddress || null,
+        customer.CogentProjectHead || null,
+        customer.CogentProjectOpsManager || null,
+        customer.CustomerImportantPersonAddress1 || null,
+        customer.CustomerImportantPersonAddress2 || null
+      ];
+      
+      const [results] = await pool.query(insertQuery, insertParams);
 
       const customerId = results.insertId;
 
       // Insert related data using Promise.all for parallel execution
       const insertPromises = [];
+
+      // Insert customer sites
+      if (customer.CustomerSite && Array.isArray(customer.CustomerSite)) {
+        customer.CustomerSite.forEach(site => {
+          insertPromises.push(
+            pool.query('INSERT INTO customer_site (CustomerID, LocationID, SiteName) VALUES (?, ?, ?)', [
+              customerId, site.LocationID, site.site
+            ])
+          );
+        });
+      }
 
       // Insert customer office addresses
       if (customer.CustomerOfficeAddress && Array.isArray(customer.CustomerOfficeAddress)) {
@@ -351,12 +431,16 @@ module.exports = (pool) => {
         filePaths: filePaths
       });
 
+      // Ensure CustomerCode is explicitly set in response
       const responseData = {
         CustomerID: customerId,
         CustomerCode: customerCode,
         ...customer,
         ...filePaths
       };
+
+      // Double-check that CustomerCode is in the response
+      responseData.CustomerCode = customerCode;
 
       console.log('🔍 BACKEND DEBUG - Final response data:', responseData);
       res.status(201).json(responseData);
@@ -382,6 +466,19 @@ module.exports = (pool) => {
     const { id } = req.params;
     const customer = req.body;
     const files = req.files;
+
+    if (customer.CustomerSite && typeof customer.CustomerSite === 'string') {
+      customer.CustomerSite = JSON.parse(customer.CustomerSite);
+    }
+    if (customer.CustomerOfficeAddress && typeof customer.CustomerOfficeAddress === 'string') {
+      customer.CustomerOfficeAddress = JSON.parse(customer.CustomerOfficeAddress);
+    }
+    if (customer.CustomerKeyContact && typeof customer.CustomerKeyContact === 'string') {
+      customer.CustomerKeyContact = JSON.parse(customer.CustomerKeyContact);
+    }
+    if (customer.CustomerCogentContact && typeof customer.CustomerCogentContact === 'string') {
+      customer.CustomerCogentContact = JSON.parse(customer.CustomerCogentContact);
+    }
 
     console.log('🔧 Customer UPDATE request for ID:', id);
     console.log('📝 Customer data received:', customer);
@@ -514,7 +611,7 @@ module.exports = (pool) => {
 
       await pool.query(`
         UPDATE Customer SET
-          MasterCustomerName = ?, Name = ?, CustomerCode = ?, ServiceCode = ?, TypeOfServices = ?, Locations = ?, CustomerSite = ?,
+          MasterCustomerName = ?, Name = ?, CustomerCode = ?, ServiceCode = ?, TypeOfServices = ?, Locations = ?,
           CustomerMobileNo = ?, AlternateMobileNo = ?, CustomerEmail = ?, CustomerContactPerson = ?, CustomerGroup = ?, CityName = ?,
           HouseFlatNo = ?, StreetLocality = ?, CustomerCity = ?, CustomerState = ?, CustomerPinCode = ?, CustomerCountry = ?,
           Agreement = ?, AgreementFile = ?, AgreementDate = ?, AgreementTenure = ?, AgreementExpiryDate = ?,
@@ -529,7 +626,7 @@ module.exports = (pool) => {
         WHERE CustomerID = ?
       `, [
         processedCustomer.MasterCustomerName, processedCustomer.Name, processedCustomer.CustomerCode, processedCustomer.ServiceCode,
-        processedCustomer.TypeOfServices, processedCustomer.Locations, processedCustomer.CustomerSite,
+        processedCustomer.TypeOfServices, processedCustomer.Locations,
         processedCustomer.CustomerMobileNo, processedCustomer.AlternateMobileNo, processedCustomer.CustomerEmail, processedCustomer.CustomerContactPerson, processedCustomer.CustomerGroup, processedCustomer.CityName,
         processedCustomer.house_flat_no || null, processedCustomer.street_locality || null, processedCustomer.city || null, processedCustomer.state || null, processedCustomer.pin_code || null, processedCustomer.country || 'India',
         processedCustomer.Agreement, filePaths.AgreementFile, processedCustomer.AgreementDate,
@@ -548,6 +645,16 @@ module.exports = (pool) => {
         processedCustomer.CustomerImportantPersonAddress1, processedCustomer.CustomerImportantPersonAddress2,
         id
       ]);
+
+      // Update customer sites
+      if (customer.CustomerSite && Array.isArray(customer.CustomerSite)) {
+        await pool.query('DELETE FROM customer_site WHERE CustomerID = ?', [id]);
+        for (const site of customer.CustomerSite) {
+          await pool.query('INSERT INTO customer_site (CustomerID, LocationID, SiteName) VALUES (?, ?, ?)', [
+            id, site.LocationID, site.site
+          ]);
+        }
+      }
 
       // Update customer office addresses
       if (customer.CustomerOfficeAddress && Array.isArray(customer.CustomerOfficeAddress)) {
@@ -677,5 +784,139 @@ module.exports = (pool) => {
     }
   });
 
-  return router;
-};
+  // Get customer sites with location details
+  router.get('/:id/sites', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [sites] = await pool.query(`
+        SELECT
+          cs.*,
+          l.LocationName,
+          l.Address,
+          c.Name as CustomerName,
+          c.CustomerCode
+        FROM customer_site cs
+        LEFT JOIN Location l ON cs.LocationID = l.LocationID
+        LEFT JOIN Customer c ON cs.CustomerID = c.CustomerID
+        WHERE cs.CustomerID = ?
+        ORDER BY cs.SiteID DESC
+      `, [id]);
+
+      res.json({ success: true, data: sites });
+    } catch (error) {
+      console.error('Error fetching customer sites:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Add a new site to customer
+  router.post('/:id/sites', async (req, res) => {
+    const { id } = req.params;
+    const { LocationID, SiteName } = req.body;
+
+    if (!LocationID || !SiteName) {
+      return res.status(400).json({ error: 'LocationID and SiteName are required' });
+    }
+
+    try {
+      // Check if customer exists
+      const [customerCheck] = await pool.query('SELECT CustomerID FROM Customer WHERE CustomerID = ?', [id]);
+      if (customerCheck.length === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      // Check if location exists
+      const [locationCheck] = await pool.query('SELECT LocationID FROM Location WHERE LocationID = ?', [LocationID]);
+      if (locationCheck.length === 0) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+
+      const [result] = await pool.query(
+        'INSERT INTO customer_site (CustomerID, LocationID, SiteName) VALUES (?, ?, ?)',
+        [id, LocationID, SiteName]
+      );
+
+      // Fetch the created site with location details
+      const [newSite] = await pool.query(`
+        SELECT
+          cs.*,
+          l.LocationName,
+          l.Address,
+          c.Name as CustomerName,
+          c.CustomerCode
+        FROM customer_site cs
+        LEFT JOIN Location l ON cs.LocationID = l.LocationID
+        LEFT JOIN Customer c ON cs.CustomerID = c.CustomerID
+        WHERE cs.SiteID = ?
+      `, [result.insertId]);
+
+      res.status(201).json({ success: true, data: newSite[0] });
+    } catch (error) {
+      console.error('Error creating customer site:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Update customer site
+  router.put('/:id/sites/:siteId', async (req, res) => {
+    const { id, siteId } = req.params;
+    const { LocationID, SiteName } = req.body;
+
+    if (!LocationID || !SiteName) {
+      return res.status(400).json({ error: 'LocationID and SiteName are required' });
+    }
+
+    try {
+      // Check if location exists
+      const [locationCheck] = await pool.query('SELECT LocationID FROM Location WHERE LocationID = ?', [LocationID]);
+      if (locationCheck.length === 0) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+
+      const [result] = await pool.query(
+        'UPDATE customer_site SET LocationID = ?, SiteName = ? WHERE SiteID = ? AND CustomerID = ?',
+        [LocationID, SiteName, siteId, id]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Customer site not found' });
+      }
+
+      // Fetch the updated site with location details
+      const [updatedSite] = await pool.query(`
+        SELECT
+          cs.*,
+          l.LocationName,
+          l.Address,
+          c.Name as CustomerName,
+          c.CustomerCode
+        FROM customer_site cs
+        LEFT JOIN Location l ON cs.LocationID = l.LocationID
+        LEFT JOIN Customer c ON cs.CustomerID = c.CustomerID
+        WHERE cs.SiteID = ?
+      `, [siteId]);
+
+      res.json({ success: true, data: updatedSite[0] });
+    } catch (error) {
+      console.error('Error updating customer site:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Delete customer site
+  router.delete('/:id/sites/:siteId', async (req, res) => {
+    const { id, siteId } = req.params;
+    try {
+      const [result] = await pool.query('DELETE FROM customer_site WHERE SiteID = ? AND CustomerID = ?', [siteId, id]);
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Customer site not found' });
+      }
+      res.json({ success: true, message: 'Customer site deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting customer site:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+   return router;
+ };

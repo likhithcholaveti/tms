@@ -4,7 +4,26 @@ const router = express.Router();
 // This file handles notification and reminder functionality
 // It provides endpoints for checking expiring documents and managing alerts
 
-module.exports = (pool) => {
+module.exports = (pool, notificationService) => {
+  // Get expiry alerts from NotificationService
+  router.get('/expiry-alerts', async (req, res) => {
+    try {
+      const alerts = await notificationService.getExpiryAlerts();
+      res.json({
+        success: true,
+        data: alerts,
+        count: alerts.length
+      });
+    } catch (error) {
+      console.error('Error fetching expiry alerts:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch expiry alerts',
+        details: error.message
+      });
+    }
+  });
+
   // Get expiring documents for notifications
   router.get('/expiring-documents', async (req, res) => {
     try {

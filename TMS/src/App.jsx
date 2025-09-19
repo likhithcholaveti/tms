@@ -16,6 +16,7 @@ import AdhocTransactionForm from './routes/AdhocTransactionForm';
 import ProjectForm from './routes/ProjectForm';
 import BillingForm from './routes/BillingForm';
 import ReportsForm from './routes/ReportsForm';
+import NotificationSettings from './components/NotificationSettings';
 // import VehicleProjectLinking from './components/VehicleProjectLinking';
 import authService from './services/authService';
 import './App.css';
@@ -99,6 +100,11 @@ function App() {
             <Route path="/reports" element={
               <ProtectedRoute requiredRole="admin">
                 <ReportsForm />
+              </ProtectedRoute>
+            } />
+            <Route path="/notification-settings" element={
+              <ProtectedRoute>
+                <NotificationSettings />
               </ProtectedRoute>
             } />
             {/* Vehicle-Project Linking removed - no longer used */}

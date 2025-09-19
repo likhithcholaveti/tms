@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "node-cron": "^4.2.1",
+    "nodemailer": "^7.0.6",
+    "twilio": "^5.9.0"
+  },
+  "devDependencies": {
+    "axios": "^1.12.2",
+    "jest": "^30.1.3",
+    "supertest": "^7.1.4"
+  }
+}

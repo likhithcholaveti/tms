@@ -64,7 +64,7 @@ const Dropdown = ({
       return option;
     }
     
-    return option[valueKey] || option.id || option.value;
+    return option[valueKey] || option.id || option.value || '';
   };
 
   const handleChange = (e) => {

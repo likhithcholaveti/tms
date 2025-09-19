@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -7,12 +8,12 @@ const router = express.Router();
 
 module.exports = (pool) => {
   // Get all locations
-  // This route retrieves all location records from the database with customer information.
-  // It responds with a JSON array of location objects including customer names.
+  // This route retrieves all location records from the database with customer information and site details.
+  // It responds with a JSON array of location objects including customer names and associated sites.
   router.get('/', async (req, res) => {
     try {
       const [rows] = await pool.query(`
-        SELECT 
+        SELECT
           l.LocationID,
           l.CustomerID,
           l.LocationName,
@@ -23,6 +24,23 @@ module.exports = (pool) => {
         LEFT JOIN Customer c ON l.CustomerID = c.CustomerID
         ORDER BY l.LocationID DESC
       `);
+
+      // Add site information for each location
+      for (const location of rows) {
+        const [sites] = await pool.query(`
+          SELECT
+            cs.SiteID,
+            cs.SiteName,
+            c.Name as CustomerName,
+            c.CustomerCode
+          FROM customer_site cs
+          LEFT JOIN Customer c ON cs.CustomerID = c.CustomerID
+          WHERE cs.LocationID = ?
+        `, [location.LocationID]);
+
+        location.CustomerSites = sites;
+      }
+
       res.json(rows);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -30,11 +48,10 @@ module.exports = (pool) => {
     }
   });
 
-  // Get a single location by ID
-  // This route retrieves a specific location record based on the provided ID.
-  // It responds with a JSON object of the location if found, or a 404 error if not found.
-  router.get('/:id', async (req, res) => {
-    const { id } = req.params;
+  // Get locations by customer ID
+  // This route retrieves location records filtered by the given customer ID.
+  router.get('/customer/:customerId', async (req, res) => {
+    const { customerId } = req.params;
     try {
       const [rows] = await pool.query(`
         SELECT 
@@ -46,13 +63,56 @@ module.exports = (pool) => {
           c.CustomerCode
         FROM Location l
         LEFT JOIN Customer c ON l.CustomerID = c.CustomerID
+        WHERE l.CustomerID = ?
+        ORDER BY l.LocationID DESC
+      `, [customerId]);
+      res.json({ data: rows });
+    } catch (error) {
+      console.error('Error fetching locations by customer:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // Get a single location by ID
+  // This route retrieves a specific location record based on the provided ID with associated sites.
+  // It responds with a JSON object of the location if found, or a 404 error if not found.
+  router.get('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+      const [rows] = await pool.query(`
+        SELECT
+          l.LocationID,
+          l.CustomerID,
+          l.LocationName,
+          l.Address,
+          c.Name as CustomerName,
+          c.CustomerCode
+        FROM Location l
+        LEFT JOIN Customer c ON l.CustomerID = c.CustomerID
         WHERE l.LocationID = ?
       `, [id]);
-      
+
       if (rows.length === 0) {
         return res.status(404).json({ error: 'Location not found' });
       }
-      res.json(rows[0]);
+
+      const location = rows[0];
+
+      // Add site information for this location
+      const [sites] = await pool.query(`
+        SELECT
+          cs.SiteID,
+          cs.SiteName,
+          c.Name as CustomerName,
+          c.CustomerCode
+        FROM customer_site cs
+        LEFT JOIN Customer c ON cs.CustomerID = c.CustomerID
+        WHERE cs.LocationID = ?
+      `, [id]);
+
+      location.CustomerSites = sites;
+
+      res.json(location);
     } catch (error) {
       console.error('Error fetching location:', error);
       res.status(500).json({ error: 'Internal server error' });

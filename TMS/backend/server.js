@@ -8,7 +8,7 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
-const PORT = 3004; // Temporary port for testing
+const PORT = process.env.PORT || 3005; // Changed port to 3005 for testing to avoid conflict
 
 // Middleware
 app.use(cors());
@@ -22,6 +22,7 @@ const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'root',
   database: process.env.DB_NAME || 'transportation_management',
   waitForConnections: true,
   connectionLimit: 10,
@@ -32,9 +33,9 @@ const dbConfig = {
 };
 
 // Only add password if it's provided
-if (process.env.DB_PASSWORD) {
-  dbConfig.password = process.env.DB_PASSWORD;
-}
+// if (process.env.DB_PASSWORD) {
+//   dbConfig.password = process.env.DB_PASSWORD;
+// }
 
 const pool = mysql.createPool(dbConfig);
 
@@ -78,8 +79,18 @@ const adhocTransactionRoutes = require('./routes/adhocTransactions');
 const exportRoutes = require('./routes/export');
 const importRoutes = require('./routes/import');
 const notificationsRoutes = require('./routes/notifications');
+const ratesRoutes = require('./routes/rates');
 const pincodeRoutes = require('./routes/pincode');
 const ifscRoutes = require('./routes/ifsc');
+
+// Import Notification Service
+const NotificationService = require('./services/notificationService');
+
+// Initialize Notification Service
+const notificationService = new NotificationService(pool);
+
+// Start scheduled notification job
+notificationService.startScheduledJob();
 
 // Use routes
 app.use('/api/auth', authRoutes(pool));
@@ -102,7 +113,8 @@ app.use('/api/adhoc-transactions', adhocTransactionRoutes(pool));
 // app.use('/api/vehicle-project-linking', vehicleProjectLinkingRoutes(pool));
 app.use('/api/export', exportRoutes(pool));
 app.use('/api/import', importRoutes(pool));
-app.use('/api/notifications', notificationsRoutes(pool));
+app.use('/api/notifications', notificationsRoutes(pool, notificationService));
+app.use('/api/rates', ratesRoutes(pool));
 app.use('/api/pincode', pincodeRoutes(pool));
 app.use('/api/pincode', pincodeRoutes);
 app.use('/api/ifsc', ifscRoutes(pool));

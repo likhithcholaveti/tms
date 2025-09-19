@@ -84,10 +84,10 @@ module.exports = (pool) => {
       );
       
       if (users.length === 0) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid email or password'
-        });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password. Please check your credentials and try again.'
+      });
       }
       
       const user = users[0];
@@ -96,10 +96,10 @@ module.exports = (pool) => {
       const isPasswordValid = await bcrypt.compare(password, user.password_hash);
       
       if (!isPasswordValid) {
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid email or password'
-        });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password. Please check your credentials and try again.'
+      });
       }
       
       // Generate JWT token

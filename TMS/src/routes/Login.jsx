@@ -12,11 +12,13 @@ const Login = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Redirect if already authenticated
+  // Check if already authenticated
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   useEffect(() => {
-    if (authService.isAuthenticated()) {
-      authService.redirectByRole();
-    }
+    const authenticated = authService.isAuthenticated();
+    setIsAuthenticated(authenticated);
+    // Don't auto-redirect, allow user to logout and switch accounts
   }, []);
 
   const handleChange = (e) => {
@@ -65,10 +67,31 @@ const Login = () => {
           <p>Transport Management System</p>
         </div>
 
+        {isAuthenticated && (
+          <div className="already-logged-in">
+            <div className="info-message">
+              <span className="info-icon">ℹ️</span>
+              <strong>You are already logged in.</strong>
+              <br />
+              <small>If you want to login with a different account, please logout first.</small>
+            </div>
+            <button
+              type="button"
+              onClick={() => authService.logout()}
+              className="logout-btn"
+            >
+              Logout & Switch Account
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="login-form">
           {error && (
             <div className="error-message">
-              {error}
+              <span className="error-icon">⚠️</span>
+              <strong>Login Failed:</strong> {error}
+              <br />
+              <small>Please check your email and password, then try again.</small>
             </div>
           )}
 

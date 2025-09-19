@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { customerAPI, projectAPI, apiHelpers } from '../services/api';
+import { customerAPI, projectAPI, locationAPI, apiHelpers } from '../services/api';
 import DataTable from '../components/DataTable';
 import Dropdown from '../components/Dropdown';
 import ExportButton from '../components/ExportButton';
@@ -74,16 +74,22 @@ const ProjectForm = () => {
   };
 
   const loadLocations = async (customerId) => {
+    console.log('Loading locations for customer:', customerId);
     try {
-      const response = await apiHelpers.get(`/api/locations/customer/${customerId}`);
-      setLocations(response.data.data || []);
+      const response = await locationAPI.getByCustomer(customerId);
+      console.log('Locations response:', response.data);
+      const locationsData = response.data.data ? response.data.data : [];
+      console.log('Setting locations to:', locationsData);
+      setLocations(locationsData);
     } catch (error) {
+      console.error('Error loading locations:', error);
       apiHelpers.showError(error, 'Failed to load locations');
     }
   };
 
   const handleCustomerChange = (e) => {
     const { value } = e.target;
+    console.log('Customer changed to:', value);
     setProjectData(prev => ({
       ...prev,
       CustomerID: value,
@@ -91,11 +97,13 @@ const ProjectForm = () => {
     }));
     if (value) {
       loadLocations(value);
+    } else {
+      setLocations([]);
     }
   };
 
   const handleInputChange = (e) => {
-    const { name, value, type, files } = e.target;
+    const { name, value, type, files, selectedOption } = e.target;
 
     if (type === 'file') {
       setProjectData(prev => ({ ...prev, [name]: files[0] }));
@@ -126,6 +134,10 @@ const ProjectForm = () => {
     if (!projectData.CustomerID) {
       newErrors.CustomerID = 'Customer selection is required';
     }
+
+    // if (!projectData.LocationID) {
+    //   newErrors.LocationID = 'Location is required';
+    // }
 
     if (!projectData.ProjectValue.trim()) {
       newErrors.ProjectValue = 'Project value is required';
@@ -195,6 +207,7 @@ const ProjectForm = () => {
     setProjectData(getInitialState());
     setErrors({});
     setEditingProject(null);
+    setLocations([]); // Clear locations when resetting form
   };
 
   // Direct backend export function
@@ -328,6 +341,7 @@ const ProjectForm = () => {
             options={locations}
             valueKey="LocationID"
             labelKey="LocationName"
+            formatLabel={(location) => `${location.LocationName}`}
             placeholder="Select a location"
             required={required}
             error={errors[name]}
@@ -439,7 +453,7 @@ const ProjectForm = () => {
               <div className="form-grid">
                 {renderFormField('Project Name', 'ProjectName', 'text', { placeholder: 'Enter project name' }, true)}
                 {renderFormField('Customer', 'CustomerID', 'select', {}, true)}
-                {renderFormField('Location', 'LocationID', 'select', {}, true)}
+                {renderFormField('Location', 'LocationID', 'select', {}, false)}
                 {renderFormField('Project Code', 'ProjectCode', 'text', { placeholder: 'Auto-generated', readOnly: true })}
                 {renderFormField('Project Description', 'ProjectDescription', 'textarea', { placeholder: 'Enter project description' })}
                 {renderFormField('Project Value (₹)', 'ProjectValue', 'number', { placeholder: 'Enter project value' }, true)}

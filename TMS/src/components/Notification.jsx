@@ -41,8 +41,11 @@ const Notification = ({ message, type, duration = 4000, onClose }) => {
 };
 
 // Notification Manager Component
+import useExpiryAlerts from '../hooks/useExpiryAlerts';
+
 export const NotificationManager = () => {
   const [notifications, setNotifications] = useState([]);
+  const { alerts, loading, error } = useExpiryAlerts();
 
   useEffect(() => {
     // Listen for notification events
@@ -59,6 +62,19 @@ export const NotificationManager = () => {
       window.removeEventListener('show-notification', handleNotification);
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading && alerts.length > 0) {
+      alerts.forEach(alert => {
+        const message = `${alert.expiryType} for ${alert.itemName} ${alert.status === 'expired' ? 'has expired' : 'expires soon'} (in ${alert.daysUntilExpiry} days)`;
+        if (alert.projectName && alert.projectName !== 'N/A') {
+          showWarning(`${message} - Project: ${alert.projectName} (${alert.projectCode})`);
+        } else {
+          showWarning(message);
+        }
+      });
+    }
+  }, [alerts, loading]);
 
   const removeNotification = (id) => {
     setNotifications(prev => prev.filter(notification => notification.id !== id));

@@ -73,14 +73,13 @@ module.exports = (pool) => {
     const billing = req.body;
     try {
       const [result] = await pool.query(
-        'INSERT INTO Billing (CustomerID, ProjectID, InvoiceNo, InvoiceDate, BillingPeriodStart, BillingPeriodEnd, TotalTransactions, TotalAmount, GSTRate, GSTAmount, GrandTotal, PaymentStatus, DueDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO Billing (CustomerID, ProjectID, InvoiceNo, InvoiceDate, BillingTenure, TotalTransactions, TotalAmount, GSTRate, GSTAmount, GrandTotal, PaymentStatus, DueDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           billing.CustomerID || null,
           billing.ProjectID || null,
           billing.InvoiceNo,
           billing.InvoiceDate,
-          billing.BillingPeriodStart || null,
-          billing.BillingPeriodEnd || null,
+          billing.BillingTenure,
           billing.TotalTransactions || 0,
           billing.TotalAmount,
           billing.GSTRate || 18.00,
